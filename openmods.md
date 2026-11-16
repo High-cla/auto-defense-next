@@ -2,7 +2,6 @@
 
 PBZ Auto Defense 是一款面向 **Phantom Blade Zero（影之刃零）** 的自动防御模组。它基于 UE4SS 和 Lua，通过运行时检测到的受击帧（hit frames）与敌方攻击时间线，判断何时进行弹反、闪避或应对抓投，而不是简单地使用固定反应延迟。
 
-**当前源码版本：** v1.6.4  
 **游戏数据快照：** Steam build 26367565  
 
 ## 功能介绍
@@ -77,7 +76,6 @@ UE4SS 需要单独安装。本仓库只包含 PBZ Auto Defense 模组，不包�
 
 PBZ Auto Defense is an automatic defense mod for **Phantom Blade Zero**. It uses UE4SS and Lua to decide when to parry, dodge, or respond to a grab, using observed hit frames and attack timelines rather than a single fixed reaction delay.
 
-**Current source version:** v1.6.4  
 **Game data snapshot:** Steam build 26367565  
 
 ## What it does
