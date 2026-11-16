@@ -1,5 +1,143 @@
 # PBZ Auto Defense
 
+PBZ Auto Defense 是一款面向 **Phantom Blade Zero（影之刃零）** 的自动防御模组。它基于 UE4SS 和 Lua，通过运行时检测到的受击帧（hit frames）与敌方攻击时间线，判断何时进行弹反、闪避或应对抓投，而不是简单地使用固定反应延迟。
+
+**当前源码版本：** v1.6.3  
+**游戏数据快照：** Steam build 26367565  
+**重要说明：** 此版本已通过离线测试和代码 lint 检查，但**尚未在实际游戏运行环境中完成验证**。因此，游戏内行为和性能表现仍未得到确认。
+
+## 功能介绍
+
+- **自动弹反：** 使用运行时报告的受击帧。在自动提前量模式下，根据已学习的时机窗口调整弹反提前量；对于未知招式，则回退到较保守的时间窗口。
+- **自动闪避：** 根据招式时间线和闪避无敌帧窗口，判断红光与黑光攻击的闪避时机。同时考虑闪避间隔、动作锁定以及输入失败后的处理。
+- **抓投应对：** 抓投使用独立的提前量设置，避免普通已知招式错误套用抓投提前量。
+- **防御控制交接：** 可以检测 PBZPerfectDefense 的配置和启用状态，并在需要时让出与防御相关的控制权。这属于基于配置状态的协作机制，并非跨模组或跨进程互斥锁。
+- **原生模组菜单配置：** 通过游戏内模组菜单集成提供设置项。共有 41 个配置字段，其中 38 个可在菜单中编辑；部分设置需要重启游戏后生效。
+- **诊断信息：** 提供可选的决策记录、事件日志、性能百分位统计以及统一错误日志通道。
+
+本模组不保证能够成功防御所有招式。时机数据通过游玩逐步学习；全新安装时，本地学习数据可能尚不完整。
+
+## 安装方法
+
+### 前置要求
+
+- Phantom Blade Zero（影之刃零）。
+- 已为游戏正确安装并运行 UE4SS。
+- 如需使用游戏内配置菜单，还需要兼容版本的 PBZModsMenu 和 PBZModsMenuBridge 组件。
+
+UE4SS 需要单独安装。本仓库只包含 PBZ Auto Defense 模组，不包含 UE4SS 或游戏本体。
+
+### 安装模组
+
+1. 下载并解压模组包。如果提供了 GitHub Release，请优先使用最新 Release 附带的压缩包；否则可使用仓库源码。
+2. 将模组目录复制到游戏目录，使文件结构如下：
+
+   ```text
+   <game>/platform/steam/ue4ss/Mods/pbz-auto-defense/
+     Scripts/
+     data/
+     tools/
+     enabled.txt
+     pbz-auto-defense.modsmenu.json
+   ```
+
+   请保留目录名 `pbz-auto-defense`，并确保目录结构完整。
+3. 确认模组目录中存在 `enabled.txt`。
+4. 重新启动游戏。
+
+模组会在需要时自动创建 `pbz-auto-defense.config.json`。安装了所需菜单组件后，可通过原生菜单集成管理配置。
+
+### 更新模组
+
+关闭游戏，将新版本文件覆盖到模组目录，然后重新启动游戏。如果需要方便地回滚，更新前请备份配置文件。不要使用压缩包中的示例配置或默认配置覆盖自己的配置。
+
+### 卸载模组
+
+关闭游戏，删除 `ue4ss/Mods` 下的 `pbz-auto-defense` 文件夹即可。如果其他模组也在使用 PBZModsMenu 或 PBZModsMenuBridge，请不要删除这些共享组件。
+
+## 使用方法
+
+安装完成后启动游戏并打开原生模组菜单，找到 **PBZ Auto Defense** 即可修改设置。
+
+常用设置如下：
+
+| 设置项 | 默认值 / 可选值 | 说明 |
+|---|---|---|
+| `perfect` / `parry` | on | 启用完美防御处理 / 自动弹反 |
+| `parry_lead` | `auto` | 自动或手动弹反提前量模式 |
+| `parry_lead_seconds` | 手动设置值 | 选择手动模式时使用的弹反提前量 |
+| `dodge` | `red` | 闪避模式：`off`、`red` 或 `all`（`all` 包含黑光攻击） |
+| `dodge_lead_ms` | `120` | 闪避提前量，单位为毫秒 |
+| `dodge_gap_ms` | `220` | 两次闪避之间的最小间隔 |
+| `grab_lead_ms` | `350` | 抓投应对提前量 |
+| `min_gap_ms` | `90` | 两次弹反之间的最小间隔 |
+| `pbzpd` | `auto` | PBZPerfectDefense 控制交接：`auto`、`yield` 或 `off` |
+| `data` | `on` | 加载随模组附带的招式数据快照 |
+| `perf` | `off` | 是否记录性能测量数据 |
+| `events` | `on` | 是否写入事件日志 |
+| `ledger` | `on` | 是否写入防御决策记录 |
+
+部分选项只能在重启游戏后生效；具体字段请参考菜单和 [MENU-INTEGRATION.md](MENU-INTEGRATION.md)。建议通过游戏内菜单修改设置。修改仅支持重启生效的选项后，不要认为其会立即生效。
+
+### 日志文件
+
+模组会在自身目录中写入以下诊断文件：
+
+| 文件 | 内容 |
+|---|---|
+| `auto_defense_log.txt` | 启动、配置、Hook 状态及错误信息 |
+| `auto_defense_ledger.txt` | 防御决策、时机窗口、提前量和执行结果 |
+| `ad_events.txt` | 事件日志 |
+| `perf_log.txt` | 当 `perf=on` 时记录阶段耗时和 tick 百分位数据 |
+
+运行时还会定期在日志中报告事件丢弃数量、规则请求与拒绝次数，以及 Lua 内存使用情况。
+
+## 兼容性
+
+- **游戏：** Phantom Blade Zero（影之刃零）。
+- **游戏数据快照：** Steam build 26367565。
+- **运行环境：** 支持 Lua 的 UE4SS。
+- **可选集成：** PBZModsMenu 和 PBZModsMenuBridge，用于原生配置界面。
+- **PBZPerfectDefense：** 通过协作式配置/启用状态交接实现支持。这不是互斥机制；在竞争条件下，两个模组仍可能在同一帧尝试执行动作。
+
+招式数据快照位于 `data/ad_data.lua`。全新安装时，本地学习到的时机时间线为空；启用学习功能后，数据会在游玩过程中逐步积累。在某个招式尚未被学习之前，该招式基于时间线的闪避行为可能不可用；基于帧信息的弹反处理仍会使用较保守的回退策略。
+
+## 已知问题与限制
+
+- **尚未进行实机验证：** v1.6.3 已完成离线检查，但尚未测量实际游戏中的行为、时机准确度和 p95 性能。
+- **没有跨模组互斥锁：** PBZPerfectDefense 交接机制会检查其配置和启用状态。如果另一个模组在 PBZ Auto Defense 作出判断后改变状态，两个模组仍可能在同一帧执行动作。
+- **首次运行时学习数据为空：** 新安装没有本地学习到的受击时间线。学习过程和随附数据快照会逐步增加覆盖范围；在此之前，部分招式的时间线闪避行为可能受到限制。
+- **数据快照固定：** 随附快照基于 Steam build 26367565 生成。用于生成快照的 PBZAssist 原始输入数据已不在本仓库中，因此重新生成快照需要重新取得该源数据。
+- **性能记录默认关闭：** `perf` 默认值为 off。目前没有宣称任何实战环境下的 p95/p99 性能数据。
+
+## 构建与测试
+
+这是一个 Lua/UE4SS 模组。运行时文件由 Lua 脚本和数据组成，**无需编译；当前仓库也没有用于生成发布压缩包的打包脚本**。可分发的模组包应包含“安装方法”一节所示的模组目录结构。
+
+如需运行仓库的离线测试和 lint 检查：
+
+1. 使用可运行 `luajit` 命令的 Bash 环境。
+2. 如需执行代码 lint，请安装 `selene`；脚本会在检测到该可执行文件时运行它。
+3. 在仓库根目录执行：
+
+   ```bash
+   bash tools/run_all.sh
+   ```
+
+该脚本会运行 policy、async、timeline、menu-configuration 和 integration 测试套件。集成测试会在隔离的临时副本中运行。安装了 Selene 时，还会对 `Scripts/` 执行 `selene Scripts/` 检查。
+
+此命令只验证离线行为，不会启动游戏、证明实机兼容性，也不会生成发布压缩包。
+
+## 作者与许可证
+
+作者及维护者：High-cla。项目采用 [MIT License](LICENSE) 授权。
+
+Phantom Blade Zero 及其游戏素材归各自权利人所有。PBZ Auto Defense 是独立的社区模组，与游戏开发者无隶属关系，也未获得其认可或背书。
+
+---
+
+# English
+
 PBZ Auto Defense is an automatic defense mod for **Phantom Blade Zero**. It uses UE4SS and Lua to decide when to parry, dodge, or respond to a grab, using observed hit frames and attack timelines rather than a single fixed reaction delay.
 
 **Current source version:** v1.6.3  
