@@ -22,6 +22,8 @@
 
 把整个目录放到上面位置，确认 `enabled.txt` 存在，重启游戏。配置由菜单写入 `pbz-auto-defense.config.json`（缺省自动生成）。
 
+推荐从 [Release](https://github.com/High-cla/auto-defense-next/releases/latest) 下载 `pbz-auto-defense-v<version>.zip`（内含同样的目录结构）；本机自行打包用 `bash tools/package.sh`，产物在 `dist/`，版本取自 `tl.VERSION`。
+
 ## 常用设置
 
 | key | 默认 | 说明 |
