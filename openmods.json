@@ -5,7 +5,7 @@
   "summary": "(在auto-defense上改进而来)影之刃零全自动格挡闪避模组,推荐使用Mods Menu,AnimationCancel,PerfectDefense能力互补",
   "games": ["phantom-blade-zero"],
   "tags": ["gameplay", "quality-of-life"],
-  "cover": "cover.png",
+  "cover": "cover.webp",
   "requires": ["UE4SS v4.0.0 or newer"],
   "gameVersions": ["Steam build 26367565"]
 }
