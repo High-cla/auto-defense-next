@@ -27,7 +27,8 @@ local function write(path, text) local f = assert(io.open(path, "wb")); assert(f
 local original = read("auto_defense.txt")
 local initial = read(H.menu.path)
 write("initial-menu.config.json", initial)
-eq(S.perfect, false); eq(S.parryReach, 3); eq(S.guardReleaseAfter, 1); eq(S.guardReleaseCombatEnd, 1)
+-- the shipped config is the shipped defaults (1.6.4); keep in sync with the descriptor
+eq(S.perfect, false); eq(S.parryReach, 0.5); eq(S.guardReleaseAfter, 0.5); eq(S.guardReleaseCombatEnd, 0.5)
 eq(S.keys.parry, "F9")
 assert(_G.__LOOP() == false, "tick without a player is safe")
 local fake = { GetAddress = function() return 77 end, IsValid = function() return true end,

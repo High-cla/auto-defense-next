@@ -16,7 +16,7 @@
         "en": "perfect",
         "zh-Hans": "完美弹反"
       },
-      "default": true,
+      "default": false,
       "restart": false,
       "help": {
         "en": "Read on the game thread at the next config check (nominally once a second).",
@@ -30,7 +30,7 @@
         "en": "perfect_mode",
         "zh-Hans": "完美模式"
       },
-      "default": "always",
+      "default": "give",
       "restart": true,
       "help": {
         "en": "Saved now; restart the game to apply safely.",
@@ -118,7 +118,7 @@
         "en": "parry_reach",
         "zh-Hans": "弹反距离（米）"
       },
-      "default": 8,
+      "default": 0.5,
       "restart": false,
       "help": {
         "en": "Read on the game thread at the next config check (nominally once a second).",
@@ -149,7 +149,7 @@
         "en": "guard_release_after",
         "zh-Hans": "静默解除防守（秒）"
       },
-      "default": 0,
+      "default": 0.5,
       "restart": false,
       "help": {
         "en": "Read on the game thread at the next config check (nominally once a second).",
@@ -166,7 +166,7 @@
         "en": "guard_release_combat_end",
         "zh-Hans": "战斗结束静默（秒）"
       },
-      "default": 8,
+      "default": 0.5,
       "restart": false,
       "help": {
         "en": "Read on the game thread at the next config check (nominally once a second).",
@@ -289,7 +289,7 @@
         "en": "parry_lead_seconds",
         "zh-Hans": "手动弹反提前量（秒）"
       },
-      "default": 0.12,
+      "default": 0.08,
       "restart": false,
       "help": {
         "en": "Used only when parry_lead is manual.",
@@ -306,7 +306,7 @@
         "en": "dodge_lead_ms",
         "zh-Hans": "闪避提前量（毫秒）"
       },
-      "default": 120,
+      "default": 80,
       "restart": false,
       "help": {
         "en": "Read on the game thread at the next config check (nominally once a second).",
@@ -323,7 +323,7 @@
         "en": "dodge_gap_ms",
         "zh-Hans": "闪避间隔（毫秒）"
       },
-      "default": 220,
+      "default": 120,
       "restart": false,
       "help": {
         "en": "Read on the game thread at the next config check (nominally once a second).",
@@ -340,7 +340,7 @@
         "en": "dodge_iframe_ms",
         "zh-Hans": "闪避覆盖窗（毫秒）"
       },
-      "default": 240,
+      "default": 260,
       "restart": false,
       "help": {
         "en": "Read on the game thread at the next config check (nominally once a second).",
@@ -371,7 +371,7 @@
         "en": "receipt",
         "zh-Hans": "检查输入回执"
       },
-      "default": true,
+      "default": false,
       "restart": false,
       "help": {
         "en": "Read on the game thread at the next config check (nominally once a second).",
@@ -427,7 +427,7 @@
         "en": "min_gap_ms",
         "zh-Hans": "弹反最小间隔（毫秒）"
       },
-      "default": 90,
+      "default": 120,
       "restart": false,
       "help": {
         "en": "Read on the game thread at the next config check (nominally once a second).",
@@ -444,7 +444,7 @@
         "en": "grab_lead_ms",
         "zh-Hans": "抓取提前量（毫秒）"
       },
-      "default": 350,
+      "default": 240,
       "restart": false,
       "help": {
         "en": "Read on the game thread at the next config check (nominally once a second).",
@@ -461,7 +461,7 @@
         "en": "dodge_cd",
         "zh-Hans": "避免闪避动作重叠"
       },
-      "default": true,
+      "default": false,
       "restart": false,
       "help": {
         "en": "Read on the game thread at the next config check (nominally once a second).",
@@ -475,7 +475,7 @@
         "en": "busy_skip",
         "zh-Hans": "动作锁期间等待"
       },
-      "default": true,
+      "default": false,
       "restart": false,
       "help": {
         "en": "Read on the game thread at the next config check (nominally once a second).",

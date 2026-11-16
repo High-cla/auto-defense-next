@@ -9,6 +9,7 @@ Versions are the `tl.VERSION` value in `Scripts/main.lua`; the release tag is `v
 - 根因：菜单按 `encodeName` 把模组名编码成 `pbz%2dauto%2ddefense` 后写 `Mods/PBZModsMenuBridge/pending-<enc>.json`，但本机落盘的文件名丢了 `%`（`pending-pbz2dauto2ddefense.json`）；Bridge 只认带 `%` 的名字，于是永不匹配——config 不写、`saved-<enc>.txt` 不生成，菜单 8×250 ms 后判定未保存。
 - 新增 [Scripts/ad_menu_bridge.lua](<Mods/pbz-auto-defense/Scripts/ad_menu_bridge.lua>)：把完整的 loose 名 pending 逐字节镜像成 Bridge 认识的 exact 名；把 Bridge 写出的 `saved-<exact>.txt` 复制成 loose 名供菜单回读；`events-<loose>.txt` 作为 `menu_config` 的第二事件源。只在 loose 完整（CRLF 结尾）且 exact 不存在时动作，写后回读校验，失败保留原文件并计数、同一原因只记一行。0.5 s 节流；名字里没有 `%` 的模组自动 no-op；不改菜单、不改 Bridge、config 仍由 Bridge 唯一写入。
 - 主循环每 tick 走一次 `guarded("menu bridge", …)`；启动日志新增 `menu bridge shim: pending-<loose>.json -> pending-<exact>.json`。
+- 默认参数改为本版实机调过的那一组，三处同源：config JSON（41 键）、描述符每行 `default`、`Scripts/main.lua` 的 `settings` 初值。变化项：perfect=false、perfect_mode=give、parry_reach=0.5、guard_release_after=0.5、guard_release_combat_end=0.5、parry_lead_seconds=0.08、dodge_lead_ms=80、dodge_gap_ms=120、dodge_iframe_ms=260、min_gap_ms=120、grab_lead_ms=240、receipt=false、dodge_cd=false、busy_skip=false（其余保持原默认，热键仍 F7/F8/F9/F6）。
 - 版本 1.6.4：`tl.VERSION`、描述符 `version`、集成测试断言同步；台账首行随版本变化。
 
 ## 1.6.3 — 2026-11-16

@@ -135,22 +135,25 @@ local DEFAULT_DODGE_ATTACKS = ""
 -- a parry after which the fight counts as over and the guard is lowered (0 = off)
 -- key_perfect / key_dodge / key_parry / key_snapshot: the hotkeys, a UE4SS key
 -- name (F8, K, NUM_ONE, PAGE_UP...) with optional CTRL+ / SHIFT+ / ALT+, or none
-local settings = { perfect = true, perfectMode = "always", blackFlash = "dodge", dodge = "red", parry = true, parryMethod = "key",
+-- 1.6.4: the shipped defaults are the values this build is tuned with in game; they
+-- mirror pbz-auto-defense.config.json and the menu descriptor's per-row defaults
+local settings = { perfect = false, perfectMode = "give", blackFlash = "dodge", dodge = "red", parry = true, parryMethod = "key",
     dodgeAttacks = DEFAULT_DODGE_ATTACKS, debug = false, lang = "en", guardRelease = true,
-    guardReleaseAfter = 0, guardReleaseCombatEnd = 8, hotkeyMessage = true, perf = false, events = true, parryReach = 8, learn = true,
+    guardReleaseAfter = 0.5, guardReleaseCombatEnd = 0.5, hotkeyMessage = true, perf = false, events = true, parryReach = 0.5, learn = true,
     -- 1.4.3, from PBZAssist (timing.*): read every incoming hit's own time and
     -- type (read_frames), time the press inside the game's window (parry_lead),
     -- press the dodge dodge_lead before the hit, leave a hit that lands inside
     -- the last dodge's i-frames to it (dodge_gap / dodge_iframe), pair timeline
     -- hits the game announces (pair_frames), check the game saw the press
     -- (receipt / receipt_retry) and count everything in the ledger
-    readFrames = true, parryLeadCfg = "auto", dodgeLead = 0.12, dodgeGap = 0.22, dodgeIframe = 0.24,
-    pairFrames = true, receipt = true, receiptRetry = false, ledger = true, latency = true, data = true, dataOff = {}, dataTags = false,
-    -- 1.4.4, from PBZAssist 1.3.3: min_gap_ms 90 between two deflect presses, the
-    -- grab's own 350 ms lead, no dodge while the last one still runs (dodge_cd),
-    -- do not press into an action lock (busy_skip), hold the guard through a
-    -- flurry instead of one tap per hit (flurry_guard)
-    minGap = 0.09, grabLeadMs = 0.35, dodgeCd = true, busySkip = true, flurryGuard = true,
+    readFrames = true, parryLeadCfg = "auto", dodgeLead = 0.08, dodgeGap = 0.12, dodgeIframe = 0.26,
+    pairFrames = true, receipt = false, receiptRetry = false, ledger = true, latency = true, data = true, dataOff = {}, dataTags = false,
+    -- 1.4.4, from PBZAssist 1.3.3: min_gap_ms between two deflect presses, the
+    -- grab's own lead, dodging again while the last dodge still runs (dodge_cd),
+    -- pressing into an action lock (busy_skip), holding the guard through a
+    -- flurry instead of one tap per hit (flurry_guard); the shipped numbers are the
+    -- tuned ones: min_gap 120 ms, grab 240 ms, dodge_cd off, busy_skip off
+    minGap = 0.12, grabLeadMs = 0.24, dodgeCd = false, busySkip = false, flurryGuard = true,
     -- 1.5.1: PBZPerfectDefense 1.8.0 AutoGuard presses and holds the guard itself;
     -- auto = stop guarding while that mod has it on, yield = whenever that mod runs,
     -- off = keep guarding (pbzpd)
@@ -431,7 +434,7 @@ local tl = { BLACK_LEAD = 0.5, GIVE_RELEASE = 0.6, BULLET_HOLD = 1.2, TORNADO_MO
     -- late: test10e P2_GEx_01 dodged at the frame and still grabbed)
     -- 1.4.4 (PBZAssist defense.grab_lead_ms = 350, "100 ms late = grabbed"): the
     -- grab's own lead; 0.15 s was the frame-only value and too late for the dodge
-    grabTimes = { GA_Scavenger_P2_GEx_01_C = 0.48 }, grabLead = settings.grabLeadMs or 0.35 }
+    grabTimes = { GA_Scavenger_P2_GEx_01_C = 0.48 }, grabLead = settings.grabLeadMs or 0.24 }
 
 -- 1.6.2: one error channel. Every hook install/callback failure lands here with a
 -- traceback the first time it is seen, so a broken hook is visible with debug = off
@@ -1106,7 +1109,7 @@ do
         if settings.latency and latency > 0 then lead = math.max(0.05, lead - latency * 0.5) end
         return lead
     end
-    tl.dodgeLead = function() return math.max(0.04, settings.dodgeLead or 0.12) end
+    tl.dodgeLead = function() return math.max(0.04, settings.dodgeLead or 0.08) end
     -- A dodge does not come out while the last one plays (log: "dodge did not come
     -- out"), but a hit landing inside that dodge's i-frames is already avoided, so
     -- it is left to it instead of a second press (PBZAssist timing.dodge_gap_ms 220)
@@ -1120,7 +1123,7 @@ do
         if since <= 0 or since >= gap then return false end
         -- the i-frames start 0.04 s after the press (AutoPerfectDefense 1.0.8), and
         -- the game sees the press `latency` late
-        local iframe = settings.dodgeIframe or 0.24
+        local iframe = settings.dodgeIframe or 0.26
         return since + due >= 0.04 + (settings.latency and latency or 0) and since + due <= iframe
     end
     -- timeline pairing: the game announces these hits too, so the frame handler
@@ -1820,7 +1823,7 @@ end
 -- 1.4.4 (PBZAssist timing.min_gap_ms = 90): a press less than this after the last
 -- one is no new press for the game, the key just stays down, and the deflect is
 -- perfect but takes the damage (1.4.1: 31 of 192). 40 ms was too short.
-tl.TAP_GAP, tl.tapEndAt, tl.tapPending, tl.gapTaps = settings.minGap or 0.09, -10, nil, 0
+tl.TAP_GAP, tl.tapEndAt, tl.tapPending, tl.gapTaps = settings.minGap or 0.12, -10, nil, 0
 local function tickTapHold()
     if tapHold and tl.guardOwned() then tapHold = nil tl.tapEndAt = os.clock() return end
     local p = tl.tapPending
@@ -3966,7 +3969,7 @@ local function onActivate(ctx)
         -- 1.5.0: the long grab lead only for what the game data calls a grab
         local glead = tl.grabLead
         if settings.data and tl.dat and tl.dat.ready and tl.dat.isGrab(n) == false then
-            glead = settings.dodgeLead or 0.12
+            glead = settings.dodgeLead or 0.08
         end
         if d and d - glead > 0.2 then tl.grabDodgeAt[2] = tl.grabAt + d - glead end
         tlNote = (tlNote or "") .. "  << grab: dodge its frame"
