@@ -2,7 +2,7 @@
   "$schema": "https://openmods.nexus/openmods.schema.json",
   "openmods": 1,
   "name": "auto-defense-next",
-  "summary": "(在auto-defense上改进而来)影之刃零全自动格挡闪避模组",
+  "summary": "(在auto-defense上改进而来)影之刃零全自动格挡闪避模组,推荐使用Mods Menu,AnimationCancel,PerfectDefense能力互补",
   "games": ["phantom-blade-zero"],
   "tags": ["gameplay", "quality-of-life"],
   "cover": "cover.png",
