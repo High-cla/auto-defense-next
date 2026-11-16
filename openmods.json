@@ -2,7 +2,7 @@
   "$schema": "https://openmods.nexus/openmods.schema.json",
   "openmods": 1,
   "name": "auto-defense-next",
-  "summary": "Automatically parries, dodges and responds to grabs in Phantom Blade Zero using hit frames and attack timelines.",
+  "summary": "(在auto-defense上改进而来)影之刃零全自动格挡闪避模组",
   "games": ["phantom-blade-zero"],
   "tags": ["gameplay", "quality-of-life"],
   "requires": ["UE4SS v4.0.0 or newer"],
