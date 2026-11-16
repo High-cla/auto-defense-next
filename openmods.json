@@ -2,7 +2,7 @@
   "$schema": "https://openmods.nexus/openmods.schema.json",
   "openmods": 1,
   "name": "auto-defense-next",
-  "summary": "影之刃零自动弹反与闪避模组 | Auto parry and dodge mod for Phantom Blade Zero",
+  "summary": "影之刃零自动弹反与闪避模组 | Auto parry and dodge mod for Phantom Blade Zero. 推荐搭配 Mods Menu、AnimationCancel、PerfectDefense，功能互补 | Works alongside these complementary mods.",
   "games": [
     "phantom-blade-zero"
   ],
