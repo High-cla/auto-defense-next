@@ -36,7 +36,6 @@ UE4SS 需要单独安装。本仓库只包含 PBZ Auto Defense 模组，不包�
    <game>/platform/steam/ue4ss/Mods/pbz-auto-defense/
      Scripts/
      data/
-     tools/
      enabled.txt
      pbz-auto-defense.modsmenu.json
    ```
@@ -112,7 +111,7 @@ UE4SS 需要单独安装。本仓库只包含 PBZ Auto Defense 模组，不包�
 
 ## 构建与测试
 
-这是一个 Lua/UE4SS 模组。运行时文件由 Lua 脚本和数据组成，**无需编译**。发布压缩包由 `bash tools/package.sh` 生成（版本取自 `Scripts/main.lua` 的 `tl.VERSION`），产物为按“安装方法”一节所示目录结构打包的 `dist/pbz-auto-defense-v<version>.zip`；脚本只收录白名单内的文件，日志、账本、学习数据与个人配置一律不进包。
+这是一个 Lua/UE4SS 模组。运行时文件由 Lua 脚本和数据组成，**无需编译**。发布压缩包由 `bash tools/package.sh` 生成（版本取自 `Scripts/main.lua` 的 `tl.VERSION`），产物为按“安装方法”一节所示目录结构打包的 `dist/pbz-auto-defense-v<version>.zip`；压缩包只含游戏要加载的文件（Scripts、data、enabled.txt、菜单 json），解压即可直接放进 `Mods/`；文档、测试与工具留在仓库，日志、账本、学习数据与个人配置一律不进包。
 
 如需运行仓库的离线测试和 lint 检查：
 
@@ -174,7 +173,6 @@ Install UE4SS separately. This repository contains the PBZ Auto Defense mod, not
    <game>/platform/steam/ue4ss/Mods/pbz-auto-defense/
      Scripts/
      data/
-     tools/
      enabled.txt
      pbz-auto-defense.modsmenu.json
    ```
@@ -250,7 +248,7 @@ The move-data snapshot is bundled in `data/ad_data.lua`. On a fresh installation
 
 ## How to build and test
 
-This is a Lua/UE4SS mod. Its runtime files are Lua scripts and data; **there is no compilation step**. Release archives are produced by `bash tools/package.sh` (version read from `tl.VERSION` in `Scripts/main.lua`), which writes `dist/pbz-auto-defense-v<version>.zip` using the directory layout shown under [How to install](#how-to-install). The script packs a whitelist only: logs, ledgers, learned data and personal configuration are never included.
+This is a Lua/UE4SS mod. Its runtime files are Lua scripts and data; **there is no compilation step**. Release archives are produced by `bash tools/package.sh` (version read from `tl.VERSION` in `Scripts/main.lua`), which writes `dist/pbz-auto-defense-v<version>.zip` using the directory layout shown under [How to install](#how-to-install). The archive contains only what the game loads (Scripts, data, enabled.txt, menu json) and unpacks straight into `Mods/`; documentation, tests and tools stay in the repository, and logs, ledgers, learned data and personal configuration are never included.
 
 To run the repository's offline test and lint gate:
 

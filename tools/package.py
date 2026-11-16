@@ -1,9 +1,19 @@
 #!/usr/bin/env python3
 """Build the release archive: dist/pbz-auto-defense-v<version>.zip
 
-Contents are whitelisted on purpose. Runtime state (logs, ledger, events,
-learned timelines, config, backups) must never leak into a release: it is
-the player's data, not source.
+The archive holds only what the game loads, laid out so a player can unzip it
+straight into <game>/platform/steam/ue4ss/Mods/:
+
+    pbz-auto-defense/
+      Scripts/*.lua
+      data/ad_data.lua
+      enabled.txt
+      pbz-auto-defense.modsmenu.json
+
+Documentation, tests, generators and the packager itself stay in the
+repository and are deliberately not shipped. Runtime state (logs, ledger,
+events, learned timelines, config, backups) belongs to the player and must
+never leak into a release either.
 
     bash tools/package.sh          # writes dist/pbz-auto-defense-v<ver>.zip
 """
@@ -19,23 +29,9 @@ FOLDER = "pbz-auto-defense"
 INCLUDE = [
     "enabled.txt",
     "pbz-auto-defense.modsmenu.json",
-    "README.md",
-    "CHANGELOG.md",
-    "LICENSE",
-    "MODULES.md",
-    "MENU-INTEGRATION.md",
-    "ASYNC-OBSERVABILITY.md",
-    "AUDIT-2026-11-16.md",
-    "openmods.json",
-    "openmods.md",
     "data/ad_data.lua",
-    "tools/run_all.sh",
-    "tools/run_integration.sh",
-    "tools/package.sh",
-    "tools/package.py",
-    "tools/hooks/pre-commit",
 ]
-GLOBS = [("Scripts", r"^[A-Za-z0-9_]+\.lua$"), ("tools", r"^(test_|make_ad_data)[A-Za-z0-9_]*\.lua$")]
+GLOBS = [("Scripts", r"^[A-Za-z0-9_]+\.lua$")]
 
 
 def version():
@@ -75,7 +71,6 @@ def main():
             with open(src, "rb") as fh:
                 zf.writestr(info, fh.read())
             written += 1
-        # zipfile has no directory entries above; add one so unpackers create the root
         root = zipfile.ZipInfo(FOLDER + "/", date_time=(1980, 1, 1, 0, 0, 0))
         root.external_attr = (0o40755 << 16) | 0x10
         zf.writestr(root, b"")
