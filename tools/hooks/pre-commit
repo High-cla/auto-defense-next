@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Offline gate: every suite plus the linter, before anything is committed.
+# Install once: cp tools/hooks/pre-commit .git/hooks/pre-commit
+exec bash tools/run_all.sh

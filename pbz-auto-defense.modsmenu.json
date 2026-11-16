@@ -1,0 +1,837 @@
+{
+  "title": {
+    "en": "PBZ Auto Defense",
+    "zh-Hans": "PBZ 自动防守"
+  },
+  "description": {
+    "en": "Lua defense runtime with native Mods Menu config. Restart-only fields are marked. Free-text fields are read-only.",
+    "zh-Hans": "保留 Lua 防守运行时，接入原生模组菜单配置。重启项已标注；两个自由文本项只读。"
+  },
+  "version": "1.6.3",
+  "settings": [
+    {
+      "key": "perfect",
+      "type": "toggle",
+      "label": {
+        "en": "perfect",
+        "zh-Hans": "完美弹反"
+      },
+      "default": true,
+      "restart": false,
+      "help": {
+        "en": "Read on the game thread at the next config check (nominally once a second).",
+        "zh-Hans": "下次游戏线程配置检查生效（名义间隔 1 秒）。"
+      }
+    },
+    {
+      "key": "perfect_mode",
+      "type": "choice",
+      "label": {
+        "en": "perfect_mode",
+        "zh-Hans": "完美模式"
+      },
+      "default": "always",
+      "restart": true,
+      "help": {
+        "en": "Saved now; restart the game to apply safely.",
+        "zh-Hans": "保存后重启游戏安全生效。"
+      },
+      "options": [
+        "always",
+        "give",
+        "window"
+      ]
+    },
+    {
+      "key": "black_flash",
+      "type": "choice",
+      "label": {
+        "en": "black_flash",
+        "zh-Hans": "黑闪处理"
+      },
+      "default": "dodge",
+      "restart": true,
+      "help": {
+        "en": "Saved now; restart the game to apply safely.",
+        "zh-Hans": "保存后重启游戏安全生效。"
+      },
+      "options": [
+        "dodge",
+        "parry"
+      ]
+    },
+    {
+      "key": "dodge",
+      "type": "choice",
+      "label": {
+        "en": "dodge",
+        "zh-Hans": "闪避模式"
+      },
+      "default": "red",
+      "restart": true,
+      "help": {
+        "en": "Saved now; restart the game to apply safely.",
+        "zh-Hans": "保存后重启游戏安全生效。"
+      },
+      "options": [
+        "off",
+        "red",
+        "all"
+      ]
+    },
+    {
+      "key": "parry",
+      "type": "toggle",
+      "label": {
+        "en": "parry",
+        "zh-Hans": "自动弹反"
+      },
+      "default": true,
+      "restart": false,
+      "help": {
+        "en": "Read on the game thread at the next config check (nominally once a second).",
+        "zh-Hans": "下次游戏线程配置检查生效（名义间隔 1 秒）。"
+      }
+    },
+    {
+      "key": "parry_method",
+      "type": "choice",
+      "label": {
+        "en": "parry_method",
+        "zh-Hans": "弹反输入方式"
+      },
+      "default": "key",
+      "restart": true,
+      "help": {
+        "en": "Saved now; restart the game to apply safely.",
+        "zh-Hans": "保存后重启游戏安全生效。"
+      },
+      "options": [
+        "key",
+        "ability"
+      ]
+    },
+    {
+      "key": "parry_reach",
+      "type": "number",
+      "label": {
+        "en": "parry_reach",
+        "zh-Hans": "弹反距离（米）"
+      },
+      "default": 8,
+      "restart": false,
+      "help": {
+        "en": "Read on the game thread at the next config check (nominally once a second).",
+        "zh-Hans": "下次游戏线程配置检查生效（名义间隔 1 秒）。"
+      },
+      "min": 0,
+      "max": 100,
+      "step": 0.5
+    },
+    {
+      "key": "guard_release",
+      "type": "toggle",
+      "label": {
+        "en": "guard_release",
+        "zh-Hans": "冲刺解除防守"
+      },
+      "default": true,
+      "restart": false,
+      "help": {
+        "en": "Read on the game thread at the next config check (nominally once a second).",
+        "zh-Hans": "下次游戏线程配置检查生效（名义间隔 1 秒）。"
+      }
+    },
+    {
+      "key": "guard_release_after",
+      "type": "number",
+      "label": {
+        "en": "guard_release_after",
+        "zh-Hans": "静默解除防守（秒）"
+      },
+      "default": 0,
+      "restart": false,
+      "help": {
+        "en": "Read on the game thread at the next config check (nominally once a second).",
+        "zh-Hans": "下次游戏线程配置检查生效（名义间隔 1 秒）。"
+      },
+      "min": 0,
+      "max": 120,
+      "step": 0.5
+    },
+    {
+      "key": "guard_release_combat_end",
+      "type": "number",
+      "label": {
+        "en": "guard_release_combat_end",
+        "zh-Hans": "战斗结束静默（秒）"
+      },
+      "default": 8,
+      "restart": false,
+      "help": {
+        "en": "Read on the game thread at the next config check (nominally once a second).",
+        "zh-Hans": "下次游戏线程配置检查生效（名义间隔 1 秒）。"
+      },
+      "min": 0,
+      "max": 120,
+      "step": 0.5
+    },
+    {
+      "key": "lang",
+      "type": "choice",
+      "label": {
+        "en": "lang",
+        "zh-Hans": "提示语言"
+      },
+      "default": "en",
+      "restart": false,
+      "help": {
+        "en": "Read on the game thread at the next config check (nominally once a second).",
+        "zh-Hans": "下次游戏线程配置检查生效（名义间隔 1 秒）。"
+      },
+      "options": [
+        "en",
+        "vi"
+      ]
+    },
+    {
+      "key": "hotkey_message",
+      "type": "toggle",
+      "label": {
+        "en": "hotkey_message",
+        "zh-Hans": "热键屏幕提示"
+      },
+      "default": true,
+      "restart": false,
+      "help": {
+        "en": "Read on the game thread at the next config check (nominally once a second).",
+        "zh-Hans": "下次游戏线程配置检查生效（名义间隔 1 秒）。"
+      }
+    },
+    {
+      "key": "learn",
+      "type": "toggle",
+      "label": {
+        "en": "learn",
+        "zh-Hans": "学习新命中"
+      },
+      "default": true,
+      "restart": false,
+      "help": {
+        "en": "Controls new learned_hits lessons, not the separate disabled LEARN experiment.",
+        "zh-Hans": "仅控制 learned_hits 的新学习，不等于固定关闭的 LEARN 实验。"
+      }
+    },
+    {
+      "key": "debug",
+      "type": "toggle",
+      "label": {
+        "en": "debug",
+        "zh-Hans": "详细诊断日志"
+      },
+      "default": false,
+      "restart": false,
+      "help": {
+        "en": "Read on the game thread at the next config check (nominally once a second).",
+        "zh-Hans": "下次游戏线程配置检查生效（名义间隔 1 秒）。"
+      }
+    },
+    {
+      "key": "perf",
+      "type": "toggle",
+      "label": {
+        "en": "perf",
+        "zh-Hans": "性能日志"
+      },
+      "default": false,
+      "restart": false,
+      "help": {
+        "en": "Read on the game thread at the next config check (nominally once a second).",
+        "zh-Hans": "下次游戏线程配置检查生效（名义间隔 1 秒）。"
+      }
+    },
+    {
+      "key": "read_frames",
+      "type": "toggle",
+      "label": {
+        "en": "read_frames",
+        "zh-Hans": "读取真实命中帧"
+      },
+      "default": true,
+      "restart": false,
+      "help": {
+        "en": "Read on the game thread at the next config check (nominally once a second).",
+        "zh-Hans": "下次游戏线程配置检查生效（名义间隔 1 秒）。"
+      }
+    },
+    {
+      "key": "parry_lead",
+      "type": "choice",
+      "label": {
+        "en": "parry_lead",
+        "zh-Hans": "弹反提前量模式"
+      },
+      "default": "auto",
+      "restart": false,
+      "help": {
+        "en": "Read on the game thread at the next config check (nominally once a second).",
+        "zh-Hans": "下次游戏线程配置检查生效（名义间隔 1 秒）。"
+      },
+      "options": [
+        "auto",
+        "manual"
+      ]
+    },
+    {
+      "key": "parry_lead_seconds",
+      "type": "number",
+      "label": {
+        "en": "parry_lead_seconds",
+        "zh-Hans": "手动弹反提前量（秒）"
+      },
+      "default": 0.12,
+      "restart": false,
+      "help": {
+        "en": "Used only when parry_lead is manual.",
+        "zh-Hans": "仅在 parry_lead 为 manual 时使用。"
+      },
+      "min": 0,
+      "max": 1,
+      "step": 0.01
+    },
+    {
+      "key": "dodge_lead_ms",
+      "type": "number",
+      "label": {
+        "en": "dodge_lead_ms",
+        "zh-Hans": "闪避提前量（毫秒）"
+      },
+      "default": 120,
+      "restart": false,
+      "help": {
+        "en": "Read on the game thread at the next config check (nominally once a second).",
+        "zh-Hans": "下次游戏线程配置检查生效（名义间隔 1 秒）。"
+      },
+      "min": 0,
+      "max": 1000,
+      "step": 10
+    },
+    {
+      "key": "dodge_gap_ms",
+      "type": "number",
+      "label": {
+        "en": "dodge_gap_ms",
+        "zh-Hans": "闪避间隔（毫秒）"
+      },
+      "default": 220,
+      "restart": false,
+      "help": {
+        "en": "Read on the game thread at the next config check (nominally once a second).",
+        "zh-Hans": "下次游戏线程配置检查生效（名义间隔 1 秒）。"
+      },
+      "min": 0,
+      "max": 2000,
+      "step": 10
+    },
+    {
+      "key": "dodge_iframe_ms",
+      "type": "number",
+      "label": {
+        "en": "dodge_iframe_ms",
+        "zh-Hans": "闪避覆盖窗（毫秒）"
+      },
+      "default": 240,
+      "restart": false,
+      "help": {
+        "en": "Read on the game thread at the next config check (nominally once a second).",
+        "zh-Hans": "下次游戏线程配置检查生效（名义间隔 1 秒）。"
+      },
+      "min": 0,
+      "max": 2000,
+      "step": 10
+    },
+    {
+      "key": "pair_frames",
+      "type": "toggle",
+      "label": {
+        "en": "pair_frames",
+        "zh-Hans": "配对时间轴与真实帧"
+      },
+      "default": true,
+      "restart": false,
+      "help": {
+        "en": "Read on the game thread at the next config check (nominally once a second).",
+        "zh-Hans": "下次游戏线程配置检查生效（名义间隔 1 秒）。"
+      }
+    },
+    {
+      "key": "receipt",
+      "type": "toggle",
+      "label": {
+        "en": "receipt",
+        "zh-Hans": "检查输入回执"
+      },
+      "default": true,
+      "restart": false,
+      "help": {
+        "en": "Read on the game thread at the next config check (nominally once a second).",
+        "zh-Hans": "下次游戏线程配置检查生效（名义间隔 1 秒）。"
+      }
+    },
+    {
+      "key": "receipt_retry",
+      "type": "toggle",
+      "label": {
+        "en": "receipt_retry",
+        "zh-Hans": "未收到回执时重试（实验）"
+      },
+      "default": false,
+      "restart": false,
+      "help": {
+        "en": "Read on the game thread at the next config check (nominally once a second).",
+        "zh-Hans": "下次游戏线程配置检查生效（名义间隔 1 秒）。"
+      }
+    },
+    {
+      "key": "latency",
+      "type": "toggle",
+      "label": {
+        "en": "latency",
+        "zh-Hans": "输入延迟自校准"
+      },
+      "default": true,
+      "restart": false,
+      "help": {
+        "en": "Read on the game thread at the next config check (nominally once a second).",
+        "zh-Hans": "下次游戏线程配置检查生效（名义间隔 1 秒）。"
+      }
+    },
+    {
+      "key": "ledger",
+      "type": "toggle",
+      "label": {
+        "en": "ledger",
+        "zh-Hans": "防守决策账本"
+      },
+      "default": true,
+      "restart": false,
+      "help": {
+        "en": "Read on the game thread at the next config check (nominally once a second).",
+        "zh-Hans": "下次游戏线程配置检查生效（名义间隔 1 秒）。"
+      }
+    },
+    {
+      "key": "min_gap_ms",
+      "type": "number",
+      "label": {
+        "en": "min_gap_ms",
+        "zh-Hans": "弹反最小间隔（毫秒）"
+      },
+      "default": 90,
+      "restart": false,
+      "help": {
+        "en": "Read on the game thread at the next config check (nominally once a second).",
+        "zh-Hans": "下次游戏线程配置检查生效（名义间隔 1 秒）。"
+      },
+      "min": 0,
+      "max": 1000,
+      "step": 10
+    },
+    {
+      "key": "grab_lead_ms",
+      "type": "number",
+      "label": {
+        "en": "grab_lead_ms",
+        "zh-Hans": "抓取提前量（毫秒）"
+      },
+      "default": 350,
+      "restart": false,
+      "help": {
+        "en": "Read on the game thread at the next config check (nominally once a second).",
+        "zh-Hans": "下次游戏线程配置检查生效（名义间隔 1 秒）。"
+      },
+      "min": 0,
+      "max": 2000,
+      "step": 10
+    },
+    {
+      "key": "dodge_cd",
+      "type": "toggle",
+      "label": {
+        "en": "dodge_cd",
+        "zh-Hans": "避免闪避动作重叠"
+      },
+      "default": true,
+      "restart": false,
+      "help": {
+        "en": "Read on the game thread at the next config check (nominally once a second).",
+        "zh-Hans": "下次游戏线程配置检查生效（名义间隔 1 秒）。"
+      }
+    },
+    {
+      "key": "busy_skip",
+      "type": "toggle",
+      "label": {
+        "en": "busy_skip",
+        "zh-Hans": "动作锁期间等待"
+      },
+      "default": true,
+      "restart": false,
+      "help": {
+        "en": "Read on the game thread at the next config check (nominally once a second).",
+        "zh-Hans": "下次游戏线程配置检查生效（名义间隔 1 秒）。"
+      }
+    },
+    {
+      "key": "flurry_guard",
+      "type": "toggle",
+      "label": {
+        "en": "flurry_guard",
+        "zh-Hans": "连续攻击按住防守"
+      },
+      "default": true,
+      "restart": true,
+      "help": {
+        "en": "Saved now; restart the game to apply safely.",
+        "zh-Hans": "保存后重启游戏安全生效。"
+      }
+    },
+    {
+      "key": "pbzpd",
+      "type": "choice",
+      "label": {
+        "en": "pbzpd",
+        "zh-Hans": "PBZPerfectDefense 防守让位"
+      },
+      "default": "auto",
+      "restart": true,
+      "help": {
+        "en": "Saved now; restart the game to apply safely.",
+        "zh-Hans": "保存后重启游戏安全生效。"
+      },
+      "options": [
+        "auto",
+        "yield",
+        "off"
+      ]
+    },
+    {
+      "key": "data",
+      "type": "toggle",
+      "label": {
+        "en": "data",
+        "zh-Hans": "加载游戏招式数据"
+      },
+      "default": true,
+      "restart": true,
+      "help": {
+        "en": "Saved now; restart the game to apply safely.",
+        "zh-Hans": "保存后重启游戏安全生效。"
+      }
+    },
+    {
+      "key": "data_tags",
+      "type": "toggle",
+      "label": {
+        "en": "data_tags",
+        "zh-Hans": "使用招式要求标签"
+      },
+      "default": false,
+      "restart": true,
+      "help": {
+        "en": "Saved now; restart the game to apply safely.",
+        "zh-Hans": "保存后重启游戏安全生效。"
+      }
+    },
+    {
+      "key": "dodge_attacks",
+      "type": "readonly",
+      "label": {
+        "en": "dodge_attacks",
+        "zh-Hans": "实验闪避关键字"
+      },
+      "default": "",
+      "restart": true,
+      "help": {
+        "en": "Edit this string in the JSON file; no text editor is available in the native menu.",
+        "zh-Hans": "菜单不支持自由文本编辑，请手动修改 JSON。"
+      }
+    },
+    {
+      "key": "data_off",
+      "type": "readonly",
+      "label": {
+        "en": "data_off",
+        "zh-Hans": "旧数据排除清单（当前无效果）"
+      },
+      "default": "",
+      "restart": true,
+      "help": {
+        "en": "Preserved legacy field; the defense runtime does not consume it. Edit JSON manually.",
+        "zh-Hans": "此旧字段当前没有运行时消费点，不会过滤数据；只能手动编辑 JSON。"
+      }
+    },
+    {
+      "key": "key_perfect",
+      "type": "choice",
+      "label": {
+        "en": "key_perfect",
+        "zh-Hans": "完美弹反热键"
+      },
+      "default": "F7",
+      "restart": true,
+      "help": {
+        "en": "Saved now; restart the game to apply safely.",
+        "zh-Hans": "保存后重启游戏安全生效。"
+      },
+      "options": [
+        "none",
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F7",
+        "F8",
+        "F9",
+        "F10",
+        "F11",
+        "F12",
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H",
+        "I",
+        "J",
+        "K",
+        "L",
+        "M",
+        "N",
+        "O",
+        "P",
+        "Q",
+        "R",
+        "S",
+        "T",
+        "U",
+        "V",
+        "W",
+        "X",
+        "Y",
+        "Z",
+        "CTRL+F6",
+        "CTRL+F7",
+        "CTRL+F8",
+        "CTRL+F9",
+        "CTRL+F10",
+        "CTRL+F11",
+        "CTRL+F12"
+      ]
+    },
+    {
+      "key": "key_dodge",
+      "type": "choice",
+      "label": {
+        "en": "key_dodge",
+        "zh-Hans": "闪避模式热键"
+      },
+      "default": "F8",
+      "restart": true,
+      "help": {
+        "en": "Saved now; restart the game to apply safely.",
+        "zh-Hans": "保存后重启游戏安全生效。"
+      },
+      "options": [
+        "none",
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F7",
+        "F8",
+        "F9",
+        "F10",
+        "F11",
+        "F12",
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H",
+        "I",
+        "J",
+        "K",
+        "L",
+        "M",
+        "N",
+        "O",
+        "P",
+        "Q",
+        "R",
+        "S",
+        "T",
+        "U",
+        "V",
+        "W",
+        "X",
+        "Y",
+        "Z",
+        "CTRL+F6",
+        "CTRL+F7",
+        "CTRL+F8",
+        "CTRL+F9",
+        "CTRL+F10",
+        "CTRL+F11",
+        "CTRL+F12"
+      ]
+    },
+    {
+      "key": "key_parry",
+      "type": "choice",
+      "label": {
+        "en": "key_parry",
+        "zh-Hans": "自动弹反热键"
+      },
+      "default": "F9",
+      "restart": true,
+      "help": {
+        "en": "F9 also opens Mods Menu. Prefer CTRL+F9 or another key; changes need a restart.",
+        "zh-Hans": "F9 与模组菜单冲突，建议 CTRL+F9；保存后重启生效。"
+      },
+      "options": [
+        "none",
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F7",
+        "F8",
+        "F9",
+        "F10",
+        "F11",
+        "F12",
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H",
+        "I",
+        "J",
+        "K",
+        "L",
+        "M",
+        "N",
+        "O",
+        "P",
+        "Q",
+        "R",
+        "S",
+        "T",
+        "U",
+        "V",
+        "W",
+        "X",
+        "Y",
+        "Z",
+        "CTRL+F6",
+        "CTRL+F7",
+        "CTRL+F8",
+        "CTRL+F9",
+        "CTRL+F10",
+        "CTRL+F11",
+        "CTRL+F12"
+      ]
+    },
+    {
+      "key": "key_snapshot",
+      "type": "choice",
+      "label": {
+        "en": "key_snapshot",
+        "zh-Hans": "诊断快照热键"
+      },
+      "default": "F6",
+      "restart": true,
+      "help": {
+        "en": "Saved now; restart the game to apply safely.",
+        "zh-Hans": "保存后重启游戏安全生效。"
+      },
+      "options": [
+        "none",
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F7",
+        "F8",
+        "F9",
+        "F10",
+        "F11",
+        "F12",
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H",
+        "I",
+        "J",
+        "K",
+        "L",
+        "M",
+        "N",
+        "O",
+        "P",
+        "Q",
+        "R",
+        "S",
+        "T",
+        "U",
+        "V",
+        "W",
+        "X",
+        "Y",
+        "Z",
+        "CTRL+F6",
+        "CTRL+F7",
+        "CTRL+F8",
+        "CTRL+F9",
+        "CTRL+F10",
+        "CTRL+F11",
+        "CTRL+F12"
+      ]
+    },
+    {
+      "key": "events",
+      "type": "toggle",
+      "label": {
+        "en": "events log",
+        "zh-Hans": "事件日志"
+      },
+      "default": true,
+      "restart": false,
+      "help": {
+        "en": "Read-only replay of decisions to ad_events.txt (8 lines or 2 s per write, 4000-line cap). off = zero cost.",
+        "zh-Hans": "把决策以只读事件写入 ad_events.txt（每 8 行或 2 秒写一次，上限 4000 行）。关闭时零开销。"
+      }
+    }
+  ]
+}

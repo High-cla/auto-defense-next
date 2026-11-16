@@ -1,0 +1,12 @@
+std = "ue4ss"
+
+[lints]
+# house style: one-line guards ("if not x then return end") are everywhere on purpose
+multiple_statements = "allow"
+# shadowing a loop variable or `self` in a nested closure is common and harmless here
+shadowing = "allow"
+# mixed tables: FX rows and settings rows carry both array and key fields by design
+mixed_table = "allow"
+# _G is read once to detect the game environment
+global_usage = "allow"
+# undefined_variable stays an error: it caught a real forward reference (`short`)

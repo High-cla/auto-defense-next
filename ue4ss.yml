@@ -1,0 +1,40 @@
+---
+# UE4SS (Unreal Engine 4/5 Scripting System) exposes a set of engine-level globals to
+# every Lua mod. The game runs Lua 5.4 (collectgarbage("generational") and the two-argument
+# math.atan both work there), so selene checks against lua54 plus this list.
+base: lua51
+globals:
+  ExecuteInGameThread:
+    any: true
+  FName:
+    any: true
+  FText:
+    any: true
+  FindAllOf:
+    any: true
+  FindFirstOf:
+    any: true
+  FindObject:
+    any: true
+  ForEachUObject:
+    any: true
+  Key:
+    any: true
+  LoopInGameThreadWithDelay:
+    any: true
+  ModifierKey:
+    any: true
+  RegisterHook:
+    any: true
+  RegisterKeyBind:
+    any: true
+  StaticConstructObject:
+    any: true
+  StaticFindObject:
+    any: true
+  LoadAsset:
+    any: true
+  CreateInvalidObject:
+    any: true
+  UE4SS:
+    any: true

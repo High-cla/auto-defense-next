@@ -1,0 +1,18 @@
+# runtime output: rewritten every session, never source
+auto_defense_log.txt
+auto_defense_ledger.txt
+ad_events.txt
+perf_log.txt
+attacks_log.txt
+attacks_log.prev.txt
+initial-menu.config.json
+*.bak
+*.bak-*
+backup/
+tools/out/
+# learned data churns every session; it belongs to the player, not to the repo
+hit_times.txt
+learned_hits.txt
+learned_flight.txt
+auto_defense.txt
+pbz-auto-defense.config.json

@@ -1,0 +1,4 @@
+build=26367565
+source=D:/steam/steamapps/common/PBZ/platform/steam/ue4ss/Mods/PBZAssist/Scripts
+bytes=198752
+tables: bfx=597(29134B) build=1(8B) dreach=5(244B) endure=12(4119B) grab=69(2321B) hit_aim=2(94B) mhit=220(15370B) mhit_req=16(1363B) multi=924(33617B) ns=279(12529B) parent=338(23347B) precise_defense=2(495B) proj=399(38503B) ts0=718(27437B) winv=72(4224B) zone_r=126(5554B)
