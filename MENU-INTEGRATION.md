@@ -77,6 +77,16 @@
 
 AD 自己的热键写入先生成临时文件，比对读取时的原文，再执行带回滚的文件替换。Windows 上不能把这称为跨进程锁或严格 CAS：比对与 rename 之间仍有并发窗口，菜单/热键同时保存须现场验证。菜单自己的 Bridge 保存机制保持原样。
 
+## 1.6.4 — 保存文件名折叠的兼容垫片
+
+现场故障（2026-11-16 三次复现，`Saved/PBZModsMenu-log.txt` 每次一行 `ue4ss/pbz-auto-defense: settings not saved`）：菜单用 `encodeName` 把模组名编码成 `pbz%2dauto%2ddefense`，再写 `Mods/PBZModsMenuBridge/pending-<enc>.json`；但本机落盘的文件名是 `pending-pbz2dauto2ddefense.json`——`%` 字节整个消失。Bridge 只认带 `%` 的那个名字（`PBZModsMenuBridge/Scripts/main.lua:257`），于是永不匹配：config 不写、`saved-<enc>.txt` 不生成，菜单按 8×250 ms 重试后判定未保存（`Mods/PBZModsMenu/main.js:76,1514`）。
+
+- 新模块 [Scripts/ad_menu_bridge.lua](<Mods/pbz-auto-defense/Scripts/ad_menu_bridge.lua>) 只做名字归一，不复制 Bridge 的校验/替换逻辑：把完整的 `pending-<loose>.json`（`loose` = 去掉所有 `%` 的拼写）逐字节镜像成 `pending-<exact>.json` 交给 Bridge；把 Bridge 写出的 `saved-<exact>.txt` 复制成 `saved-<loose>.txt` 供菜单回读；`events-<loose>.txt` 作为 `menu_config` 的第二事件源。
+- 镜像条件：文本以 CRLF 结尾、`pending-<exact>.json` 不存在（不覆盖 Bridge 尚未取走的文件）、写后回读逐字节一致才删掉 loose。任一步失败保留 loose 并计数，同一原因只记一行日志。
+- 节流 0.5 s（Bridge 自身每 250 ms 扫一次目录）；名字里没有 `%` 的模组（如 `BossAI`）自动 no-op。`MOD_DIR` 形如 `<mod>\Scripts\..\` 时先折叠 `.`/`..` 再取末段，否则名字会算成 `..`。
+- 不改菜单、不改 Bridge、不自己写 config JSON：Bridge 仍是唯一的配置写入者。
+- 仍待现场确认：`%` 丢失发生在写侧还是读侧（垫片对两种行为都成立）；一次真实菜单保存是否在 2 s 重试窗内端到端完成。
+
 ## 重新分析后的架构
 
 `PBZModsMenu UI → 既有 Bridge → AD JSON → menu_config 校验/迁移/生效边界 → Lua 防守循环`
@@ -98,11 +108,12 @@ AD 自己的热键写入先生成临时文件，比对读取时的原文，再�
 
 ## 验证证据与现场验收
 
-离线验证：主脚本及两个新 Lua 模块 loadfile 通过；[tools/test_menu_config.lua](<Mods/pbz-auto-defense/tools/test_menu_config.lua>) 61 条断言通过；隔离临时目录的 [tools/test_integration.lua](<Mods/pbz-auto-defense/tools/test_integration.lua>) 25 条计数断言通过（整文件装载、无玩家 tick、迁移、镜像/清理、待重启值、热键合并、TXT 不变）。测试使用 UE4SS 桩，不等于 UE4SS 游戏运行或 GUI 验证。
+离线验证（1.6.4）：`bash tools/run_all.sh` 六套共 327 条断言全绿——POLICY 35 / ASYNC 46 / TIMELINE 18 / MENU 69 / BRIDGE 115 / INTEGRATION 44，`selene` 0 errors。其中 [tools/test_menu_bridge.lua](<Mods/pbz-auto-defense/tools/test_menu_bridge.lua>) 115 条覆盖 256 字节 encode 往返、镜像与删除、半写不镜像、exact 已存在不覆盖、写失败去重与 remove 失败计数、并发新保存不被吞、0.5 s 节流、无 `%` 名字 no-op、`Scripts\..\` 折叠与分隔符风格；[tools/test_integration.lua](<Mods/pbz-auto-defense/tools/test_integration.lua>) 44 条在隔离临时目录装载整个主脚本（含垫片安装路径）。测试使用 UE4SS 桩，不等于 UE4SS 游戏运行或 GUI 验证。
 
 测试调试过程中曾在实装目录运行离线加载并生成初始 JSON；该次日志是桩化加载记录，**不可视作实战证据**。随后给集成测试加入专用测试目录标记，最终在隔离副本通过。原 TXT 的 SHA-256 与备份一致，旧用户配置未丢。
 
 建议现场验收：
+0. 保存链路（1.6.4 的主修复）：重启游戏后在菜单里改一个值并保存，确认 `Mods/pbz-auto-defense/pbz-auto-defense.config.json` 的 mtime 变了、桥目录出现 `saved-pbz2dauto2ddefense.txt`、运行日志出现 `menu bridge shim: queued pending-pbz%2dauto%2ddefense.json`，且菜单不再报 `settings not saved`。若仍失败，把桥目录文件清单与 `PBZModsMenu-log.txt` 末尾贴出来——那只可能是读侧也丢 `%`，或桥拒绝 pending（`has no config to replace`）。
 1. 重启游戏，打开系统设置 → 模组菜单，找到“PBZ 自动防守”。若行只读，确认既有 Bridge 真正加载而不仅仅是文件存在。
 2. 改 `parry_reach` 为临时测试值，检查 JSON 已保存，再恢复原值；检查运行日志没有 menu config error。
 3. 改 `key_parry` 为 CTRL+F9，确认日志标 restart required，重启后验证新按键；旧 F9 的菜单冲突应消失。

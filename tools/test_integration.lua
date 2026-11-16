@@ -100,9 +100,9 @@ eq(type(T.api), "table", "the public surface is listed")
 local missing = {}
 for _, name in ipairs(T.api) do if T[name] == nil then missing[#missing + 1] = name end end
 eq(#missing, 0, "documented api names exist: " .. table.concat(missing, ","))
-eq(T.VERSION, "1.6.3", "the version is stated once")
+eq(T.VERSION, "1.6.4", "the version is stated once")
 if T.ledFlush then T.ledFlush() end
 local led = read("auto_defense_ledger.txt")
-assert(led:find("v1.6.3", 1, true), "the ledger states the running version: " .. led:sub(1, 200))
+assert(led:find("v1.6.4", 1, true), "the ledger states the running version: " .. led:sub(1, 200))
 n = n + 1
 print("INTEGRATION PASS " .. n .. " assertions")

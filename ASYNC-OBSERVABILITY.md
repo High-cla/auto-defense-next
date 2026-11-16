@@ -88,9 +88,11 @@ plus `selene` 0 errors / 3 warnings.
 
 ## Rollback
 
-Restore `backup/main.lua.bak-1.6.3` (this release) or `backup/main.lua.bak-1.6.2` (the
-state before the audit); the modules, tests and the `events`/`perf` config rows can stay
-unused harmlessly.
+Restore `backup/main.lua.bak-1.6.4` (this release), `backup/main.lua.bak-1.6.3` (the
+state right after the audit) or `backup/main.lua.bak-1.6.2` (before it); the modules,
+tests and the `events`/`perf` config rows can stay unused harmlessly. The 1.6.4 save-name
+shim is `Scripts/ad_menu_bridge.lua` plus one line in the tick: delete the tick line and
+the install block falls back to the plain menu adapter.
 
 ## Incident: the 2000-line read limit
 

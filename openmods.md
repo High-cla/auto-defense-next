@@ -2,7 +2,7 @@
 
 PBZ Auto Defense 是一款面向 **Phantom Blade Zero（影之刃零）** 的自动防御模组。它基于 UE4SS 和 Lua，通过运行时检测到的受击帧（hit frames）与敌方攻击时间线，判断何时进行弹反、闪避或应对抓投，而不是简单地使用固定反应延迟。
 
-**当前源码版本：** v1.6.3  
+**当前源码版本：** v1.6.4  
 **游戏数据快照：** Steam build 26367565  
 **重要说明：** 此版本已通过离线测试和代码 lint 检查，但**尚未在实际游戏运行环境中完成验证**。因此，游戏内行为和性能表现仍未得到确认。
 
@@ -103,7 +103,7 @@ UE4SS 需要单独安装。本仓库只包含 PBZ Auto Defense 模组，不包�
 
 ## 已知问题与限制
 
-- **尚未进行实机验证：** v1.6.3 已完成离线检查，但尚未测量实际游戏中的行为、时机准确度和 p95 性能。
+- **尚未进行实机验证：** v1.6.4 已完成离线检查，但尚未测量实际游戏中的行为、时机准确度和 p95 性能。
 - **没有跨模组互斥锁：** PBZPerfectDefense 交接机制会检查其配置和启用状态。如果另一个模组在 PBZ Auto Defense 作出判断后改变状态，两个模组仍可能在同一帧执行动作。
 - **首次运行时学习数据为空：** 新安装没有本地学习到的受击时间线。学习过程和随附数据快照会逐步增加覆盖范围；在此之前，部分招式的时间线闪避行为可能受到限制。
 - **数据快照固定：** 随附快照基于 Steam build 26367565 生成。用于生成快照的 PBZAssist 原始输入数据已不在本仓库中，因此重新生成快照需要重新取得该源数据。
@@ -139,7 +139,7 @@ Phantom Blade Zero 及其游戏素材归各自权利人所有。PBZ Auto Defense
 
 PBZ Auto Defense is an automatic defense mod for **Phantom Blade Zero**. It uses UE4SS and Lua to decide when to parry, dodge, or respond to a grab, using observed hit frames and attack timelines rather than a single fixed reaction delay.
 
-**Current source version:** v1.6.3  
+**Current source version:** v1.6.4  
 **Game data snapshot:** Steam build 26367565  
 **Important:** this version has passed offline tests and lint checks, but has **not yet been verified in a live game session**. Treat in-game behavior and performance as unconfirmed.
 
@@ -240,7 +240,7 @@ The move-data snapshot is bundled in `data/ad_data.lua`. On a fresh installation
 
 ## Known issues and limitations
 
-- **No live-game validation yet:** v1.6.3 has been checked offline, but actual in-game behavior, timing, and p95 performance have not been measured.
+- **No live-game validation yet:** v1.6.4 has been checked offline, but actual in-game behavior, timing, and p95 performance have not been measured.
 - **No cross-mod lock:** the PBZPerfectDefense hand-off checks its configuration and enabled state. If the other mod changes state after PBZ Auto Defense makes its decision, both mods may still act in the same frame.
 - **Cold-start learning:** a new installation has no local learned hit timeline. Learning and the bundled data snapshot gradually fill in coverage; timeline-based dodge behavior may be limited until then.
 - **Frozen data snapshot:** the bundled snapshot was generated for Steam build 26367565. Its original generator input from PBZAssist is no longer present in this repository, so regenerating the snapshot requires that source data.

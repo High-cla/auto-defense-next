@@ -114,6 +114,9 @@ end
 function M.new(settings, opts)
     local self = { path = opts.dir .. "pbz-auto-defense.config.json",
         events = opts.dir .. "../PBZModsMenuBridge/events-pbz%2dauto%2ddefense.txt",
+        -- the menu folds '%' out of file names on this build (1.6.4), so the bridge
+        -- shim hands us the second spelling to watch as well
+        eventsAlt = opts.eventsAlt,
         pending = {}, lastChange = 0, nextAt = 0, unknown = {} }
     local json, read, write = opts.json, opts.read or readFile, opts.write or writeFile
     local function report(why)
@@ -230,6 +233,7 @@ function M.new(settings, opts)
         -- Two ~900-byte reads per second are not a budget item (audit P2-11).
         self.nextAt = now + 1
         local event = read(self.events)
+        if not event and self.eventsAlt then event = read(self.eventsAlt) end
         -- A partial event is ignored, but cannot permanently block validated JSON hand edits.
         local complete = event and ("\n" .. event):match("\nEnd=1\r?\n?$")
         local seq = complete and tonumber(("\n" .. event):match("\nChanged=(%d+)"))

@@ -1,4 +1,4 @@
-# Module layout (1.6.3)
+# Module layout (1.6.4)
 
 Decision and execution order is unchanged. What moved is **where each concern lives**
 and **which door every side effect goes through**. The audit that produced this release
@@ -6,13 +6,14 @@ is in `AUDIT-2026-11-16.md`; behaviour changes are listed there, not here.
 
 | File | Lines | Owns |
 | --- | ---: | --- |
-| `Scripts/main.lua` | 4839 | hooks, tick orchestration, timeline decisions, parry/dodge mechanics, ledger, perf, data loader |
+| `Scripts/main.lua` | 4854 | hooks, tick orchestration, timeline decisions, parry/dodge mechanics, ledger, perf, data loader |
 | `Scripts/ad_query.lua` | 107 | read-only game queries: `valid/name/unwrap/num/prop/baseName/obj/tag/tagLibrary/component/ascOf/nowOf` (log injected) |
 | `Scripts/ad_timeline.lua` | 60 | the learned timeline table **and** its count (`table/count/put/add/addRow/removeRow/get/recount/each`) |
 | `Scripts/ad_policy.lua` | 47 | the shared rules: `ask(intent)` → allow/deny + reason, `who()`, per-reason counters |
 | `Scripts/ad_input.lua` | 75 | the controlled entry: `pressGuard/releaseGuard/endStance/tag/inject` — asks the rules, then calls the registered mechanic; `stats()` |
 | `Scripts/ad_async.lua` | 104 | in-process read-only event bus + budgeted warm-up queue |
-| `Scripts/ad_json.lua` / `menu_config.lua` | 123 / 242 | strict flat JSON; native Mods Menu adapter (invariants, read-back, unknown-key naming) |
+| `Scripts/ad_json.lua` / `menu_config.lua` | 123 / 246 | strict flat JSON; native Mods Menu adapter (invariants, read-back, unknown-key naming) |
+| `Scripts/ad_menu_bridge.lua` | 158 | the Mods Menu save-name shim: mirrors the menu's folded `pending-`/`saved-` names into the spelling the bridge watches and back; never writes the config |
 | `Scripts/toast.lua` | 80 | the toast notifications (UE4SS module path, loaded with `require`) |
 | `data/ad_data.lua` | 1.16 MB | generated game-data snapshot (the runtime data layer), build=26367565. Regenerating it also rewrites `data/ad_data_meta.txt`, but the source (`Mods/PBZAssist/Scripts/enemy_data.lua`) is gone as of 2026-11-16: the snapshot is frozen and still valid, a new one needs a PBZAssist install. |
 | `tools/out/ad_data_core.lua` + `ad_data_meta.txt` | 199 KB | reduced snapshot and its build/count meta for tooling and audit only - not loaded at runtime |
@@ -48,9 +49,9 @@ Installation is `pcall`-guarded: a failure leaves the plain functions in place, 
 
 ## Verification
 
-`bash tools/run_all.sh` → POLICY 35, ASYNC 46, TIMELINE 18, MENU 69, INTEGRATION 44
-assertions; `selene` 0 errors / 3 warnings (three documented unwired diagnostics).
-`main.lua` SHA256 `ad863cf35762953feb651916603d9e2f048e3a43030259840500a95bdaef60b7`.
+`bash tools/run_all.sh` → POLICY 35, ASYNC 46, TIMELINE 18, MENU 69, BRIDGE 115,
+INTEGRATION 44 assertions; `selene` 0 errors / 3 warnings (three documented unwired
+diagnostics). `main.lua` SHA256 `37317350163613d7af9ac47abddd98173f854344972c82e8f2f10c66ea6fc777`.
 The repository's pre-commit hook runs the same gate.
 
 ## Not moved yet

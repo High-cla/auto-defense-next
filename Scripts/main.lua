@@ -244,17 +244,30 @@ do
 end
 -- 1.6.0: native Mods Menu JSON + descriptor, not a JavaScript port.
 -- The old text file is imported only when JSON is absent; it is never written again.
+-- 1.6.4: the menu drops the '%' bytes from its save file names on this build, so
+-- the shim hands the bridge the name the bridge watches (see ad_menu_bridge.lua).
 do
-    local ok, result = pcall(function()
+    local ok, result, shim = pcall(function()
         local json = dofile(MOD_DIR .. "Scripts\\ad_json.lua")
+        local logFn = function(msg) log("%s", msg) end
+        local okShim, bridge = pcall(function()
+            local B = dofile(MOD_DIR .. "Scripts\\ad_menu_bridge.lua")
+            return B.new({ modDir = MOD_DIR, log = logFn })
+        end)
+        if okShim then shim = bridge else log("menu bridge shim unavailable: %s", tostring(bridge)) end
         local menu = dofile(MOD_DIR .. "Scripts\\menu_config.lua")
         return menu.new(settings, { dir = MOD_DIR, json = json,
+            eventsAlt = shim and shim.eventsAlt or nil,
             keyValid = function(k) return hk.parse(k) ~= nil end,
-            log = function(msg) log("%s", msg) end })
+            log = logFn }), shim
     end)
     if ok then
         hk.menu = result
+        hk.bridge = shim
         hk.menu:load(true)
+        if shim and shim.mirror then
+            log("menu bridge shim: pending-%s.json -> pending-%s.json", shim.loose, shim.exact)
+        end
     else
         log("menu adapter unavailable: %s (legacy settings retained)", tostring(result))
     end
@@ -424,7 +437,7 @@ local tl = { BLACK_LEAD = 0.5, GIVE_RELEASE = 0.6, BULLET_HOLD = 1.2, TORNADO_MO
 -- traceback the first time it is seen, so a broken hook is visible with debug = off
 -- (until 1.6.2 those three went to attackLog, which returns at once unless DEBUG).
 do
-    tl.VERSION = "1.6.3"
+    tl.VERSION = "1.6.4"
     tl.errs = {}
     function tl.err(what, err)
         local n = (tl.errs[what] or 0) + 1
@@ -4622,6 +4635,8 @@ tl.main = function(id)
         end
     end
     if hk.menu then guarded("menu config", hk.menu.poll, hk.menu, t) end
+    -- the shim is throttled inside: a tick beyond its 0.5 s window costs two compares
+    if hk.bridge then guarded("menu bridge", hk.bridge.poll, hk.bridge) end
     guarded("watchdog", tl.check) -- the watchdog no longer waits for a hotkey (audit P0-3)
     -- observability only: bounded delivery, one warm-up task per tick
     if tl.bus then tl.bus.drain(tl.DRAIN_N) end
