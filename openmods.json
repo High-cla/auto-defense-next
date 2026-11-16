@@ -1,0 +1,10 @@
+{
+  "$schema": "https://openmods.nexus/openmods.schema.json",
+  "openmods": 1,
+  "name": "PBZ Auto Defense",
+  "summary": "Automatically parries, dodges and responds to grabs in Phantom Blade Zero using hit frames and attack timelines.",
+  "games": ["phantom-blade-zero"],
+  "tags": ["gameplay", "quality-of-life"],
+  "requires": ["UE4SS v4.0.0 or newer"],
+  "gameVersions": ["Steam build 26367565"]
+}
