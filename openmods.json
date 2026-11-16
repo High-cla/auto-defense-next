@@ -2,9 +2,19 @@
   "$schema": "https://openmods.nexus/openmods.schema.json",
   "openmods": 1,
   "name": "auto-defense-next",
-  "summary": "(在auto-defense上改进而来)影之刃零全自动格挡闪避模组",
-  "games": ["phantom-blade-zero"],
-  "tags": ["gameplay", "quality-of-life"],
-  "requires": ["UE4SS v4.0.0 or newer"],
-  "gameVersions": ["Steam build 26367565"]
+  "summary": "影之刃零自动弹反与闪避模组推荐,搭配 Mods Menu、AnimationCancel、PerfectDefense，功能互补 | Auto parry and dodge mod for Phantom Blade Zero.Works alongside these complementary mods.",
+  "games": [
+    "phantom-blade-zero"
+  ],
+  "tags": [
+    "gameplay",
+    "quality-of-life"
+  ],
+  "requires": [
+    "UE4SS v4.0.0 or newer"
+  ],
+  "gameVersions": [
+    "Steam build 26367565"
+  ],
+  "cover": "cover.png"
 }

@@ -2,8 +2,6 @@
 
 《Phantom Blade Zero》自动防守 mod：UE4SS + Lua，靠真实受击帧与招式时间线决定「弹反 / 闪避 / 抓投应对」，并接入原生模组菜单配置。
 
-**v1.6.4** · 离线验证：6 套测试共 327 断言全绿、`selene` 0 errors · **尚未做游戏内验证**（见「已知限制」）。
-
 ## 功能
 
 - **自动弹反**：由 `ReceiveFrames` 的真实命中帧驱动，提前量在 auto 模式下按实测窗口自适应（最多短窗优于宽窗），未学习到的招式退回保守窗口。
@@ -96,3 +94,97 @@ git commit                   # pre-commit 自动跑同一道门禁
 ## License
 
 MIT（见 [LICENSE](LICENSE)）。
+
+
+---
+
+# English
+
+PBZ Auto Defense is an automatic defense mod for **Phantom Blade Zero**. Built with UE4SS and Lua, it uses observed hit frames and enemy attack timelines to decide when to parry, dodge, or respond to grabs instead of relying on one fixed reaction delay.
+
+## Features
+
+- **Automatic parry:** Uses runtime-reported hit frames. Automatic lead mode adapts to learned timing windows; unknown moves use a conservative fallback.
+- **Automatic dodge:** Evaluates red- and black-flash attacks against move timelines and dodge invulnerability windows. It also accounts for dodge spacing, action locks, and failed inputs.
+- **Grab response:** Uses a separate lead-time setting so ordinary attacks do not inherit grab timing.
+- **Defense hand-off:** Can detect the configuration and enabled state of PBZPerfectDefense and yield guard-related control when appropriate. This is cooperative configuration-based behavior, not a cross-mod or cross-process mutex.
+- **Native mod-menu settings:** Integrates with the in-game mod menu. There are 41 configuration fields, 38 of which are editable in the menu; some settings require a restart.
+- **Diagnostics:** Optional defense decision ledger, event log, performance percentile logging, and a unified error channel.
+
+The mod does not guarantee a successful defense against every attack. Timing data is learned during play and may be incomplete on a fresh installation.
+
+## Installation
+
+Install UE4SS for the game first. Then place the complete `pbz-auto-defense` mod folder at:
+
+```
+<game>/platform/steam/ue4ss/Mods/pbz-auto-defense/
+  Scripts/
+  data/
+  enabled.txt
+  pbz-auto-defense.modsmenu.json
+```
+
+Make sure `enabled.txt` is present, then restart the game. The configuration file `pbz-auto-defense.config.json` is generated automatically when missing.
+
+For the in-game configuration menu, install compatible versions of **PBZModsMenu** and **PBZModsMenuBridge** as well. UE4SS, the game, and these optional menu components are not bundled with this repository.
+
+Recommended: download the latest package from the [GitHub Releases page](https://github.com/High-cla/auto-defense-next/releases/latest). The release ZIP contains only the runtime files needed by the game.
+
+## Common settings
+
+| Setting | Default | Description |
+|---|---|---|
+| `perfect` / `parry` | on | Perfect-defense handling / automatic parry |
+| `parry_lead` | auto | Automatic or manual parry lead mode |
+| `dodge` | red | Dodge mode: `off`, `red`, or `all` (`all` includes black-flash attacks) |
+| `dodge_lead_ms` | 120 | Dodge lead time in milliseconds |
+| `dodge_gap_ms` | 220 | Minimum interval between dodges |
+| `grab_lead_ms` | 350 | Grab-response lead time |
+| `min_gap_ms` | 90 | Minimum interval between parries |
+| `pbzpd` | auto | PBZPerfectDefense hand-off: `auto`, `yield`, or `off` (restart required) |
+| `data` | on | Load the bundled move-data snapshot (restart required) |
+| `perf` | off | Write performance measurements |
+| `events` | on | Write the event log |
+| `ledger` | on | Write the defense decision ledger |
+
+Some settings are restart-only. The in-game menu and [MENU-INTEGRATION.md](MENU-INTEGRATION.md) document the available fields and their restrictions. The in-game menu is the recommended way to change settings.
+
+## Logs and diagnostics
+
+The mod writes diagnostic files in its own mod folder:
+
+| File | Contents |
+|---|---|
+| `auto_defense_log.txt` | Startup, configuration, hook status, and errors |
+| `auto_defense_ledger.txt` | Defense decisions, timing windows, lead values, and results |
+| `ad_events.txt` | Event log |
+| `perf_log.txt` | Stage timings and tick percentiles when `perf=on` |
+
+The runtime also periodically reports dropped events, policy requests and denials, and Lua memory usage.
+
+## Compatibility and known limitations
+
+- **Game:** Phantom Blade Zero.
+- **Game data snapshot:** Steam build 26367565.
+- **Runtime:** UE4SS with Lua support.
+- **Optional menu integration:** PBZModsMenu and PBZModsMenuBridge.
+- **PBZPerfectDefense:** Integration uses a cooperative configuration/enabled-state hand-off. It is not mutual exclusion; both mods may still attempt an action in the same frame in a race condition.
+- On a fresh installation, locally learned timing data starts empty and accumulates during play when learning is enabled. Until a move has been learned, timeline-based dodge behavior may be unavailable for that move; frame-driven parry handling continues with a conservative fallback.
+- This version has passed offline tests and lint checks, but live-game behavior and real-world performance have not been verified. Performance logging is disabled by default.
+
+## Development
+
+Run the offline test and lint suite from the repository root:
+
+```bash
+bash tools/run_all.sh
+```
+
+This runs the policy, async, timeline, menu-config, and integration tests. If `selene` is installed, it also lints the Lua scripts. The test suite does not launch the game or validate in-game behavior.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
+
+Phantom Blade Zero and its game assets belong to their respective rights holders. PBZ Auto Defense is an independent community mod and is not affiliated with or endorsed by the game's developers.
