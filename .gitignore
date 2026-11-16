@@ -10,6 +10,7 @@ initial-menu.config.json
 *.bak-*
 backup/
 tools/out/
+dist/
 # learned data churns every session; it belongs to the player, not to the repo
 hit_times.txt
 learned_hits.txt

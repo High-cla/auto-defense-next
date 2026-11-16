@@ -112,7 +112,7 @@ UE4SS 需要单独安装。本仓库只包含 PBZ Auto Defense 模组，不包�
 
 ## 构建与测试
 
-这是一个 Lua/UE4SS 模组。运行时文件由 Lua 脚本和数据组成，**无需编译；当前仓库也没有用于生成发布压缩包的打包脚本**。可分发的模组包应包含“安装方法”一节所示的模组目录结构。
+这是一个 Lua/UE4SS 模组。运行时文件由 Lua 脚本和数据组成，**无需编译**。发布压缩包由 `bash tools/package.sh` 生成（版本取自 `Scripts/main.lua` 的 `tl.VERSION`），产物为按“安装方法”一节所示目录结构打包的 `dist/pbz-auto-defense-v<version>.zip`；脚本只收录白名单内的文件，日志、账本、学习数据与个人配置一律不进包。
 
 如需运行仓库的离线测试和 lint 检查：
 
@@ -250,7 +250,7 @@ The move-data snapshot is bundled in `data/ad_data.lua`. On a fresh installation
 
 ## How to build and test
 
-This is a Lua/UE4SS mod. Its runtime files are Lua scripts and data; **there is no compilation step and this repository currently has no release-archive packaging script**. A distributable package consists of the mod directory structure shown under [How to install](#how-to-install).
+This is a Lua/UE4SS mod. Its runtime files are Lua scripts and data; **there is no compilation step**. Release archives are produced by `bash tools/package.sh` (version read from `tl.VERSION` in `Scripts/main.lua`), which writes `dist/pbz-auto-defense-v<version>.zip` using the directory layout shown under [How to install](#how-to-install). The script packs a whitelist only: logs, ledgers, learned data and personal configuration are never included.
 
 To run the repository's offline test and lint gate:
 
