@@ -14,8 +14,8 @@ is in `AUDIT-2026-11-16.md`; behaviour changes are listed there, not here.
 | `Scripts/ad_async.lua` | 104 | in-process read-only event bus + budgeted warm-up queue |
 | `Scripts/ad_json.lua` / `menu_config.lua` | 123 / 242 | strict flat JSON; native Mods Menu adapter (invariants, read-back, unknown-key naming) |
 | `Scripts/toast.lua` | 80 | the toast notifications (UE4SS module path, loaded with `require`) |
-| `data/ad_data.lua` | 1.16 MB | generated game-data snapshot (the runtime data layer) |
-| `tools/out/ad_data_core.lua` | 199 KB | reduced snapshot for tooling and audit only - not loaded at runtime |
+| `data/ad_data.lua` | 1.16 MB | generated game-data snapshot (the runtime data layer), build=26367565. Regenerating it also rewrites `data/ad_data_meta.txt`, but the source (`Mods/PBZAssist/Scripts/enemy_data.lua`) is gone as of 2026-11-16: the snapshot is frozen and still valid, a new one needs a PBZAssist install. |
+| `tools/out/ad_data_core.lua` + `ad_data_meta.txt` | 199 KB | reduced snapshot and its build/count meta for tooling and audit only - not loaded at runtime |
 
 ## Intents and rules
 
