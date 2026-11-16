@@ -4,7 +4,6 @@ PBZ Auto Defense 是一款面向 **Phantom Blade Zero（影之刃零）** 的自
 
 **当前源码版本：** v1.6.3  
 **游戏数据快照：** Steam build 26367565  
-**重要说明：** 此版本已通过离线测试和代码 lint 检查，但**尚未在实际游戏运行环境中完成验证**。因此，游戏内行为和性能表现仍未得到确认。
 
 ## 功能介绍
 
@@ -80,7 +79,6 @@ PBZ Auto Defense is an automatic defense mod for **Phantom Blade Zero**. It uses
 
 **Current source version:** v1.6.3  
 **Game data snapshot:** Steam build 26367565  
-**Important:** this version has passed offline tests and lint checks, but has **not yet been verified in a live game session**. Treat in-game behavior and performance as unconfirmed.
 
 ## What it does
 
