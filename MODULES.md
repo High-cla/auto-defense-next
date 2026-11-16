@@ -59,3 +59,15 @@ The repository's pre-commit hook runs the same gate.
 The data loader (the block that builds `tl.dat`) still lives in `main.lua`: it is
 mechanical but touches every data-derived decision, so it gets its own reviewed step.
 The same holds for guard/shachi/movement extraction out of the single large do-block.
+
+## Release conventions
+
+- **Store docs carry no version string.** `README.md`, `openmods.md` and `openmods.json`
+  must not mention `vX.Y.Z`: they are edited directly on GitHub, so a version there
+  would force a hand edit on every release. The version lives in exactly three places —
+  `tl.VERSION` (main.lua), the descriptor's `"version"` field and `CHANGELOG.md`.
+- **Never bump a version inside the docs during a merge.** When `origin/main` has moved
+  (store text rewritten on GitHub), run `git merge origin/main` and keep their text
+  byte-for-byte; only code, tests and CHANGELOG are ours to change.
+- **Publishing is manual and explicit.** `tools/package.sh` + tag + release happen only
+  when the user asks for a release, never as part of a fix.
