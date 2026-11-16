@@ -1,18 +1,21 @@
-# Module layout (1.6.2)
+# Module layout (1.6.3)
 
-Decision and execution order is unchanged. What moved is **where each concern
-lives** and **which door every side effect goes through**.
+Decision and execution order is unchanged. What moved is **where each concern lives**
+and **which door every side effect goes through**. The audit that produced this release
+is in `AUDIT-2026-11-16.md`; behaviour changes are listed there, not here.
 
 | File | Lines | Owns |
 | --- | ---: | --- |
-| `Scripts/main.lua` | 4706 | hooks, tick orchestration, timeline decisions, parry/dodge mechanics, ledger/perf |
-| `Scripts/ad_query.lua` | 72 | read-only game queries: `valid/name/unwrap/obj/tag/tagLibrary/component/ascOf/nowOf` (log injected) |
-| `Scripts/ad_timeline.lua` | 26 | the learned timeline table **and** its count (`table/count/put/add/get/addCount/each`) |
+| `Scripts/main.lua` | 4839 | hooks, tick orchestration, timeline decisions, parry/dodge mechanics, ledger, perf, data loader |
+| `Scripts/ad_query.lua` | 107 | read-only game queries: `valid/name/unwrap/num/prop/baseName/obj/tag/tagLibrary/component/ascOf/nowOf` (log injected) |
+| `Scripts/ad_timeline.lua` | 60 | the learned timeline table **and** its count (`table/count/put/add/addRow/removeRow/get/recount/each`) |
 | `Scripts/ad_policy.lua` | 47 | the shared rules: `ask(intent)` → allow/deny + reason, `who()`, per-reason counters |
-| `Scripts/ad_input.lua` | 60 | the controlled entry: `pressGuard/releaseGuard/endStance/tag` — asks the rules, then calls the registered mechanic |
-| `Scripts/ad_async.lua` | 102 | in-process read-only event bus + budgeted warm-up queue |
-| `Scripts/ad_json.lua` / `menu_config.lua` | 122 / 212 | strict flat JSON, native Mods Menu adapter |
-| `data/ad_data.lua` + `ad_data_core.lua` | 1.36 MB | generated game-data snapshot |
+| `Scripts/ad_input.lua` | 75 | the controlled entry: `pressGuard/releaseGuard/endStance/tag/inject` — asks the rules, then calls the registered mechanic; `stats()` |
+| `Scripts/ad_async.lua` | 104 | in-process read-only event bus + budgeted warm-up queue |
+| `Scripts/ad_json.lua` / `menu_config.lua` | 123 / 242 | strict flat JSON; native Mods Menu adapter (invariants, read-back, unknown-key naming) |
+| `Scripts/toast.lua` | 80 | the toast notifications (UE4SS module path, loaded with `require`) |
+| `data/ad_data.lua` | 1.16 MB | generated game-data snapshot (the runtime data layer) |
+| `tools/out/ad_data_core.lua` | 199 KB | reduced snapshot for tooling and audit only - not loaded at runtime |
 
 ## Intents and rules
 
@@ -22,27 +25,36 @@ lives** and **which door every side effect goes through**.
 | `perfect_tag` | deny `pd_guard` | the perfect result belongs to the other mod when it runs |
 | `guard_release` | allow | today AD releases even while another mod holds the guard |
 | `stance_end` | allow | same; flip these two rules to `pd_guard` to make it exclusive |
-| `dodge_press` | allow | dodge was never gated by the other mod |
+| `dodge_press` | allow | now actually asked: `tl.input.inject("dodge_press", action)` is the only dodge door |
 
-`main.lua` replaces `tl.pressTap`, `tl.releaseHeldKey` and `endStance` with the choke
-after installing it, so every existing call site keeps working while the door is single.
-Installation is `pcall`-guarded: a failure leaves the plain functions in place.
+`main.lua` replaces `tl.pressTap`, `tl.releaseHeldKey` and `endStance` with the choke after
+installing it, so every existing call site keeps working while the door is single.
+Installation is `pcall`-guarded: a failure leaves the plain functions in place, and
+`tl.input` is still replaced by a pass-through so it is never `nil`.
 
 ## Contract notes
 
-- Plain dot calls (`bus.drain(16)`, `warm.step(1)`): a colon call would pass the table as
-  the first argument, so both now normalise it instead of failing mid-frame.
-- Lua string escapes: a path written as `"Scriptsad_query.lua"` becomes `a` (bell).
-  Paths in `dofile` use `/`, which Windows accepts — no escape layer to get wrong.
+- **Public surface**: `tl.api` lists the 23 names other code or tests may use; the count is
+  logged at startup (`tl api: N public names of M fields`) so a growing API is visible.
+  Everything else on `tl` is internal and may be renamed.
+- **Growable caches** register in `tl.prunable`; `tl.pruneHandles()` is the only place that
+  clears them (`parried`, `dodged`, `warned` today).
+- Plain dot calls (`bus.drain(16)`, `warm.step(1)`): a colon call passes the table as the
+  first argument, so both normalise it instead of failing mid-frame.
+- Lua string escapes: a path written as `"Scripts\ad_query.lua"` becomes `\a` (bell).
+  Paths in `dofile` use `/`, which Windows accepts.
+- The log keeps its counter, cap (3000) and stamp in one `logState` table, exposed as
+  `tl.logState` with `tl.log` so the cap is testable.
 
 ## Verification
 
-`tests`: policy 28, async 46, menu 61, integration 37 (isolated copy). `main.lua`
-SHA256 `014e0fa5…d18150`, backup `Scripts/main.lua.bak-1.6.2`.
+`bash tools/run_all.sh` → POLICY 35, ASYNC 46, TIMELINE 18, MENU 69, INTEGRATION 44
+assertions; `selene` 0 errors / 3 warnings (three documented unwired diagnostics).
+`main.lua` SHA256 `ad863cf35762953feb651916603d9e2f048e3a43030259840500a95bdaef60b7`.
+The repository's pre-commit hook runs the same gate.
 
 ## Not moved yet
 
-The data loader (the ~287-line block that builds `tl.dat` and hands back an API) still
-lives in `main.lua`; the generated tables it reads are already separate files. Moving
-the loader is mechanical but touches every data-derived decision, so it gets its own
-reviewed step rather than riding along with this one.
+The data loader (the block that builds `tl.dat`) still lives in `main.lua`: it is
+mechanical but touches every data-derived decision, so it gets its own reviewed step.
+The same holds for guard/shachi/movement extraction out of the single large do-block.
