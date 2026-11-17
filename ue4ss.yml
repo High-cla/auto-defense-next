@@ -18,7 +18,13 @@ globals:
     any: true
   ForEachUObject:
     any: true
+  CancelDelayedAction:
+    any: true
+  EngineTickAvailable:
+    any: true
   Key:
+    any: true
+  LoopInGameThreadAfterFrames:
     any: true
   LoopInGameThreadWithDelay:
     any: true
