@@ -105,6 +105,7 @@ git commit                   # pre-commit 自动跑同一道门禁
 - [docs/UE4SS-LUA-API-REFERENCE.md](docs/UE4SS-LUA-API-REFERENCE.md)：UE4SS Lua 对象、线程、Hook、定时器、容器和性能 API 实战参考
 - [docs/PBZ-GAME-API-REFERENCE.md](docs/PBZ-GAME-API-REFERENCE.md)：PBZ DeflectComponent、AbilityInputComponent、Enhanced Input 与 SDK 验证等级
 - [docs/PBZ-USMAP-TOOLCHAIN.md](docs/PBZ-USMAP-TOOLCHAIN.md)：PBZ USMAP live/offline 采集、映射格式、合并和质量检查
+- [docs/PBZ-SDK-RESOURCES.md](docs/PBZ-SDK-RESOURCES.md)：PBZModLoader Game API SDK 下载/安装、UE4SS C++ SDK Generator 与 USMAP 的区别
 - [docs/API-OPTIMIZATION-ROADMAP.md](docs/API-OPTIMIZATION-ROADMAP.md)：已完成优化、候选 API 风险分级、性能 A/B 与实机验收
 - [docs/PBZMODSMENU-API-REFERENCE.md](docs/PBZMODSMENU-API-REFERENCE.md)：PBZModsMenu 菜单 API（描述符字段、事件与桥的写盘契约、已知坑，按本机 main.js 核对）
 
