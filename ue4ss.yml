@@ -82,7 +82,9 @@ globals:
   # ---- hooks (API ref 5.1) ----
   RegisterHook:
     any: true
-  # UnregisterHook takes either (hook_id) or (pre_id, post_id), so no signature is pinned.
+  # UnregisterHook has one form: (functionPath, preId, postId); it returns nothing, so the
+  # call site must use pcall. Signatures stay unpinned here because selene cannot type a
+  # mixed (string, integer, integer) triple without a stub.
   UnregisterHook:
     any: true
   # ---- input (API ref 7.1) ----

@@ -6,7 +6,7 @@ is in `AUDIT-2026-11-16.md`; behaviour changes are listed there, not here.
 
 | File | Lines | Owns |
 | --- | ---: | --- |
-| `Scripts/main.lua` | 5145 | hooks, tick orchestration, the decision chain (`tl.decide`), parry/dodge mechanics, ledger, perf, data loader |
+| `Scripts/main.lua` | 5181 | hooks, tick orchestration, the decision chain (`tl.decide`), parry/dodge mechanics, ledger, perf, data loader |
 | `Scripts/ad_query.lua` | 176 | read-only game queries: `valid/name/unwrap/num/prop/baseName/obj/tag/tagLibrary/component/ascOf/nowOf` (log injected); `tag` memoised, `baseName` is the one name rule |
 | `Scripts/ad_compat.lua` | 61 | the runtime compat layer: `gc(mode)` / `atan(y, x)` / `version()` / `hasJit()` — the two Lua-5.4-only calls live here and nowhere else |
 | `Scripts/ad_timeline.lua` | 60 | the learned timeline table **and** its count (`table/count/put/add/addRow/removeRow/get/recount/each`) |
@@ -49,17 +49,22 @@ Installation is `pcall`-guarded: a failure leaves the plain functions in place, 
 - **Hot path**: named `RT.*` accessors instead of `pcall(function() ... end)`, one reusable
   `RT.out` frame table, constant kind tables in `RT`, one name rule (`RT.bname` →
   `Q.baseName`). Nothing in the per-tick path allocates a closure.
-- **Hooks**: UE4SS returns **two** ids per hook (pre and post) and the documented removal form is
-  `UnregisterHook(path, preId, postId)`. `RT.rememberHook(key, path, pre, post)` stores all three
-  in `tl.hookIds`; `RT.unhook(key)` tries the 3-arg form first and falls back to the id-only form
-  (a build that does not take a path). Keeping only the first id would leave the post half
-  installed — that was the audit P1-4 defect.
+- **Hooks**: UE4SS returns **two** ids per hook (pre and post) and has exactly one removal form,
+  `UnregisterHook(path, preId, postId)`, which returns nothing. `RT.rememberHook(key, path, pre,
+  post)` stores all three in `tl.hookIds`; `RT.unhook(key)` calls the 3-arg form through pcall,
+  hands the engine's error text to `tl.err` and **keeps the record** when it throws (an id thrown
+  away can never be removed later). There is no id-only overload and no global unregister helper.
+- **Is a hook installed?** `RT.installed(key)` — the record is the only answer. Installers check it
+  instead of a separate boolean, so a teardown that deletes the record lets a re-armed mod install
+  again; without it `hookAttacks` added a new id pair every tick and the old pair leaked.
 - **Teardown**: `tl.teardown(reason)` is the one place that undoes what the mod installed, in this
-  order: cancel the scheduler handle(s) → unregister every hook → cancel the toast action → flush
-  the ledger and the event sink → drop the handles a late callback could still act on. It is
-  idempotent (second call returns false) and sets `tl.stopped`, which makes `tl.main` decide
-  nothing even if a callback slips through. `tl.check(true)` (a human hotkey) re-arms the mod; the
-  automatic "main loop dead" branch calls teardown instead of leaving stale hooks firing. Key binds
+  order (the order is the contract): set `tl.stopped` **first** → cancel this mod's delayed actions
+  (`loopHandle`, `loopStale`) → `ClearAllDelayedActions()` as a backstop → unregister every hook →
+  `toast:hide()` → flush the ledger and the event sink, then **seal** the sink → drop state and the
+  install budget (`activationTries`). It is idempotent (second call returns false); every hook
+  wrapper starts with `if tl.stopped then return end` because unregistering is deferred; the
+  automatic "main loop dead" branch calls teardown instead of leaving hooks firing.
+  `tl.check(true)` (a human hotkey) re-arms the mod, re-opens the sink and logs one line. Key binds
   cannot be unregistered by the API, so a torn-down mod's hotkeys re-arm it rather than act.
 - **Growable caches** register in `tl.prunable`; `tl.pruneHandles()` is the only place that
   clears them (`parried`, `dodged`, `warned` today).

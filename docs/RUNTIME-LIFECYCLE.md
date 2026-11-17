@@ -124,36 +124,35 @@ Hook 注册不应一律发生在脚本加载的最早时刻：
 
 目标 UFunction 可能尚未进入内存；注册失败应被视作“尚不可用”，由相应低频重试策略处理，而不是把 false/nil 状态永久缓存。
 
-### Hook unregistration / Hook 注销（已实现，尚未实机验证）
+### Hook unregistration / Hook 注销（已实现，实机待验）
 
-1.6.5 起每个 hook 站点都接收 `local ok, pre, post = pcall(RegisterHook, PATH, fn)`，并调用
-`RT.rememberHook(key, path, pre, post)` 把 `{ path, pre, post }` 存入 `tl.hookIds`。此前只保存首个
-返回值，post 半边永远留在引擎里——这正是审计 P1-4 的缺陷。
+上游事实（`KintaroModding/ue4ss` release 分支的文档与 `UE4SS/src/Mod/LuaMod.cpp`）：
 
-`RT.unhook(key)` 先按上游文档形式调用 `UnregisterHook(path, preId, postId)`；该形式在本机构建被
-拒绝时回落到只带 preId 的旧形式，失败只记一次日志并返回 false（不吞错、不假装成功）。
-`RT.unhookAll()` 遍历登记表；`post` 为 nil 时按“引擎没给这一侧”处理，如实记录而不是假定存在。
+- `RegisterHook` 返回**两个整数** id（pre/post）；非 native 的蓝图 `ProcessInternal` 目标两侧 id 相同。
+- 取消注册只有 `UnregisterHook(path, preId, postId)` 一种形式，**不返回任何值**：arity/类型不对或函数名查不到会抛错，id 匹配不到则静默无操作；移除是**延迟的**（下一次该 UFunction 执行时才真正注销并释放 Lua 引用），但我们的 Lua 回调立刻失效。
+- 没有全局 `UnregisterHooks()`；模组被禁用/重载时引擎统一清 hook、keybind 与延迟动作（`LuaMod.cpp:6137-6300`）。
+- `ClearAllDelayedActions()` 一次清掉本模组拥有的全部延迟动作；`CancelDelayedAction` 对已结束或已被清掉的 handle 返回 false（属于成功）。
 
-`tl.teardown(reason)` 是唯一的卸载入口，顺序固定为：取消本模组自己的 delayed action（含
-`tl.loopStale` 里取消不掉的旧 handle，重试上限 8）→ `RT.unhookAll()` → 取消 toast 动作 →
-flush ledger 与 event sink → 清掉迟到的回调仍可能触碰的句柄 → `tl.stopped = true`。
-它幂等（第二次直接返回 false），`tl.main` 在 `tl.stopped` 时不做任何决策，看门狗判定“主循环
-已死”时调用它而不是留下半套 hook，热键 `tl.check(true)` 会重新武装并记录一行日志。
+本项目的实现：
 
-仍未证实的部分（不要写成已完成）：
-- 本次构建的 `RegisterHook` 是否在**每个**站点都返回两个 id；`post` 为 nil 时的实际行为。
-- 三参 `UnregisterHook` 是否被本机 UE4SS 接受（离线测试用的是 stub，只能证明调用形状）。
-- `RegisterKeyBind` 没有注销 API：teardown 后热键仍在，按下只会重新武装模组。
-- 卸载/热重载是否会由 UE4SS 自己清理 hook（上游文档未明确）。实机验证方法仍是：注销后触发
-  目标函数，确认 callback 不再执行；在没有这份日志之前，热更仍建议整进程重启。
+- 每个站点接收 `local ok, pre, post = pcall(RegisterHook, PATH, fn)`，并 `RT.rememberHook(key, path, pre, post)` 存进 `tl.hookIds`。
+- `RT.installed(key)` 是「这个 hook 在不在」的**唯一**答案：安装器用它判重，teardown 删记录后重新武装的模组会自然重装。曾经用独立布尔标志，teardown 清不到，复活后 hook 再也装不回来；`hookAttacks` 又完全没有判重，每 tick 泄漏一对 id。
+- `RT.unhook(key)` 用三参形式；抛错时把引擎原文交给 `tl.err` 并**保留记录**（丢掉的 id 再也注销不了）。
+- 每个 hook wrapper 首行 `if tl.stopped then return end`：注销是延迟的，闸是最后一道保险（`onStanceFrame` 会注入真实输入）。
+
+`tl.teardown(reason)` 是唯一卸载入口，顺序固定：置 `tl.stopped`（**第一步**，teardown 自己的调用栈里也不能再决策）→ 停本模组的 delayed action（`loopHandle` + `loopStale`，重试上限 8）→ `ClearAllDelayedActions()` 兜底 → `RT.unhookAll()` → `toast:hide()` → flush ledger 与 event sink 并**封口**（迟到回调不能再写一行）→ 清状态与安装预算（`activationTries` 的 12 次预算复位）。幂等；`tl.main` 在 `tl.stopped` 时不做决策；看门狗判「主循环已死」时调用它；热键 `tl.check(true)` 重新武装、重开 sink 并记一行日志。
+
+无法撤销的部分：`RegisterKeyBind`（上游没有注销 API，按下仍会进来 → 本项目当作人工重新武装）、已排队的 `ExecuteInGameThread` 一次性闭包（无 handle）、toast widget 只改 Visibility 不离开视口。
+
+仍需实机确认（离线只能证明调用形状）：本机二进制是否与 release 分支一致（三参是否被接受）、注销后目标函数确实不再进回调、`ClearAllDelayedActions` 在本机可用。
 
 ### UE4SS upstream references
 
-- [Delayed Actions API](https://github.com/ue4ss/RE-UE4SS/blob/main/docs/lua-api/global-functions/delayedactions.md)
-- [RegisterHook](https://github.com/ue4ss/RE-UE4SS/blob/main/docs/lua-api/global-functions/registerhook.md)
-- [UnregisterHook](https://github.com/ue4ss/RE-UE4SS/blob/main/docs/lua-api/global-functions/unregisterhook.md)
-
-这些上游接口说明用于核对框架调用约定；目标游戏函数是否存在、PBZ wrapper 是否可用仍由当前游戏构建决定。
+- [Delayed Actions API](https://github.com/KintaroModding/ue4ss/blob/release/docs/lua-api/global-functions/delayedactions.md)
+- [RegisterHook](https://github.com/KintaroModding/ue4ss/blob/release/docs/lua-api/global-functions/registerhook.md)
+- [UnregisterHook](https://github.com/KintaroModding/ue4ss/blob/release/docs/lua-api/global-functions/unregisterhook.md)
+- [RegisterKeyBind](https://github.com/KintaroModding/ue4ss/blob/release/docs/lua-api/global-functions/registerkeybind.md)
+- [Mod management / uninstall](https://github.com/KintaroModding/ue4ss/blob/release/docs/lua-api/global-functions/modmanagement.md)
 
 ## 7. Delayed actions outside the main loop / 其他延迟任务
 

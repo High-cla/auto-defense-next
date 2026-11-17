@@ -24,6 +24,14 @@ Versions are the `tl.VERSION` value in `Scripts/main.lua`; the release tag is `v
 - 新增 `tl.teardown(reason)`：取消本模组自己的 delayed action（含取消不掉的 stale handle）→ 注销全部 hook → 取消 toast 动作 → flush ledger 与 event sink → 清掉迟到回调仍可能触碰的句柄 → `tl.stopped = true`。幂等；`tl.main` 在 stopped 时不做决策；看门狗判定主循环已死时调用它而不是留下半套 hook；热键 `tl.check(true)` 重新武装并记录一行日志。
 - `tl.api` 24 → 25（新增 `teardown`）；集成套件 105 → 117 断言（hook 双 id 保存、三参注销收到 path 与 post、teardown 幂等、stopped 后不决策、热键重新武装）。
 - 文档：`docs/MODULES.md` 的 Hooks 契约改写、新增 Teardown 契约；`docs/RUNTIME-LIFECYCLE.md` 的“Hook 注销缺口”改为“已实现、尚未实机验证”，并列出仍待实机确认的三点（每个站点是否都返回两个 id、三参形式是否被本机构建接受、引擎是否自动清理 hook）；`RegisterKeyBind` 没有注销入口，teardown 后热键仍在、按下只会重新武装。
+- 取证后的修正（`KintaroModding/ue4ss` release 分支文档 + `UE4SS/src/Mod/LuaMod.cpp`）：
+  - `UnregisterHook` **只有三参一种形式**、**不返回值**（arity 错或函数名查不到抛错，id 匹配不到静默无操作）；原「先试三参、失败回落到单参」的回落是死代码，已删，改为把引擎错误原文交给 `tl.err`。
+  - 注销是**延迟移除**（下一次该 UFunction 执行时），但 Lua 回调立刻失效 → 每个 hook wrapper 首行加 `if tl.stopped then return end`，`onStanceFrame` 这类会注入真实输入的入口尤其需要。
+  - 「这个 hook 在不在」原来靠独立布尔标志，teardown 清不到 → 复活后 hook 装不回来；现统一为 `RT.installed(key)`（登记表是唯一事实）。顺带修掉 `hookAttacks` 无判重导致**每 tick 泄漏一对 hook id** 的缺陷（`debug=on` 或 `dodge_attacks` 非空时必现）。
+  - teardown 顺序改为「先置 `tl.stopped`」并补 `ClearAllDelayedActions()` 兜底、`toast:hide()`（不只是 cancel）、flush 后**封口** event sink（新增 `tl.eventsClose/eventsOpen`，迟到的回调不能再写一行）、复位 `activationTries` 的 12 次安装预算。
+  - `CancelDelayedAction` 返回 false 表示引擎已不认识该 handle（已结束或已被清空），按成功处理，不再塞进 `tl.loopStale` 反复重试。
+  - 文档同步：`docs/UE4SS-LUA-API-REFERENCE.md` §4.2 补 `IsValidDelayedActionHandle`、§4.3 删掉「handle 可能是 nil」的错误依据、§4.4 写明循环回调返回值被丢弃、§5.1 补延迟移除与无返回值语义、§7.1 写明热键无法注销、§8 补 teardown 顺序契约；`docs/RUNTIME-LIFECYCLE.md` 换成上游确认过的事实并把三条链接改到 `KintaroModding/ue4ss` release 分支。
+  - 测试：集成 117 → 123 断言（重复安装不再新增 hook、teardown 后重装、注销失败保留记录、`false` 视为已取消、`tl.stopped` 闸）。
 
 代码审查（调度器/查询/门禁/发布工具链）修复：
 

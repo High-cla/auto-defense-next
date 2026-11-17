@@ -544,21 +544,26 @@ do
         end
         return pre, post
     end
+    -- the installed record is the only "is this hook in place" answer: a teardown
+    -- deletes it, so a re-armed mod installs again instead of believing it is done
+    function RT.installed(key)
+        return tl.hookIds ~= nil and tl.hookIds[key] ~= nil
+    end
     function RT.unhook(key)
         local ids = tl.hookIds
         local h = ids and ids[key]
         if h == nil then return false end
-        ids[key] = nil
-        -- the 3-arg form first (documented, removes both halves); the id-only form
-        -- is the fallback for a build that does not take a path
-        local ok
-        if type(h) == "table" and h.path ~= nil then
-            ok = pcall(UnregisterHook, h.path, h.pre, h.post)
+        -- one documented form: UnregisterHook(functionPath, preId, postId). It
+        -- returns nothing, so pcall is the only success signal; a wrong signature
+        -- throws here and the engine's own text is what makes that visible.
+        local ok, e = pcall(UnregisterHook, h.path, h.pre, h.post)
+        if not ok then
+            -- the record stays: an id thrown away now can never be removed later
+            tl.err("unhook " .. tostring(key), e)
+            return false
         end
-        if not ok then ok = pcall(UnregisterHook, type(h) == "table" and h.pre or h) end
-        if ok then return true end
-        tl.err("unhook " .. tostring(key), "UnregisterHook failed")
-        return false
+        ids[key] = nil
+        return true
     end
     function RT.unhookAll()
         local ids = tl.hookIds
@@ -599,6 +604,17 @@ do
             buf = {}
         end
         tl.eventsFlush = flush -- teardown flushes what is still buffered before it stops
+        local realEmit = tl.emit
+        -- teardown seals the sink, so a late callback cannot append a line after the
+        -- last flush; re-opening is explicit, which lets a re-armed mod log again
+        tl.eventsClose = function()
+            if f then f:close() f = nil end
+            tl.emit = function() end
+        end
+        tl.eventsOpen = function()
+            tl.emit = realEmit
+            if not f then open() end
+        end
         -- the sink copies each event inside the callback: a ring slot is only
         -- valid there, so nothing retains it
         tl.bus.subscribe(function(e)
@@ -2924,7 +2940,7 @@ do
     local passive, passivePawn = nil, nil
     local sprintKeys, sprintWasDown, sprintRetryAt = nil, false, 0
     local sprintDownAt, pressCheckedFor, blindSeen = 0, nil, 0
-    local frameHooked, nextHookTry = false, 0
+    local nextHookTry = 0
 
     local function rlog(fmt, ...)
         if logged >= LOG_MAX then return end
@@ -3047,15 +3063,15 @@ do
         attackLog("  -> late attack: stance key down %s", ok and "ok" or tostring(err))
     end
     local function hookStanceFrame()
-        if frameHooked or os.clock() < nextHookTry then return end
+        if RT.installed("stance frame") or os.clock() < nextHookTry then return end
         nextHookTry = os.clock() + 5
         local ok, pre, post = pcall(RegisterHook, STANCE_FRAME_FN, function(...)
+            if tl.stopped then return end -- a torn-down mod must not inject input
             local t0 = settings.perf and os.clock()
             local okH, e = pcall(onStanceFrame, ...)
             if t0 then tl.perfAdd(tl.perf.hooks, os.clock() - t0) end
             if not okH then rlog("late attack hook error: %s", tostring(e)) end
         end)
-        frameHooked = ok
         if ok then RT.rememberHook("stance frame", STANCE_FRAME_FN, pre, post) end
         rlog("late attack hook: %s", ok and "hooked" or ("not yet: " .. tostring(pre)))
     end
@@ -4060,7 +4076,7 @@ local ACTIVATE_FNS = {
     "/MagCombatAbilities/Abilities/BP_ActionAbilityBase.BP_ActionAbilityBase_C:K2_ActivateAbility",
     "/MagCombatAbilities/Abilities/BP_ActionAbilityBase_Simple.BP_ActionAbilityBase_Simple_C:K2_ActivateAbility",
 }
-local activationHooked, activationTry, activationTries = {}, 0, 0
+local activationTry, activationTries = 0, 0
 local function onActivate(ctx)
     local ab = ctx:get()
     if not valid(ab) or not valid(currentPawn) then return end
@@ -4123,7 +4139,6 @@ tl.BULLET_FNS = {
     "/Script/PBZDeflectSystem.DeflectComponent:StopSendDeflectFrameForBullet",
     "/PBZCombatAsset/Prototypes/Bullet/Bullets/BP_PBZ_ProjectileBullet.BP_PBZ_ProjectileBullet_C:OnDodge",
 }
-tl.bulletHooked = {}
 -- for the HIT line: where the last tornado is, while it lives (is the player
 -- still in it, or did the hits come from elsewhere?)
 tl.tornadoNote = function()
@@ -4185,12 +4200,13 @@ tl.hookBullets = function()
     for i, fn in ipairs(tl.BULLET_FNS) do
         -- debug off: only SendDeflectFrame, for tl.bulletUntil (a far shot is
         -- still parried) and the tornado
-        if not tl.bulletHooked[fn] and (DEBUG or i == 1) then
+        if not RT.installed(fn) and (DEBUG or i == 1) then
             local ok, pre, post = pcall(RegisterHook, fn, function(ctx, ...)
+                if tl.stopped then return end
                 local okB, e = pcall(tl.bulletInfo, fn, ctx, ...)
                 if not okB then tl.err("bullet hook", e) end
             end)
-            if ok then tl.bulletHooked[fn] = true RT.rememberHook(fn, fn, pre, post) end
+            if ok then RT.rememberHook(fn, fn, pre, post) end
             if ok or activationTries == 1 or activationTries == 12 then
                 log("bullet probe %s: %s", fn:match("([%w_]+:[%w_]+)$") or fn, ok and "hooked" or tostring(pre))
             end
@@ -4277,15 +4293,15 @@ tl.RESULT_FNS = {
     { "/PBZDeflectSystem/BPL_DeflectUtils.BPL_DeflectUtils_C:Play Deflect Effect", "onDeflectEffect" },
     { "/PBZDeflectSystem/Abilities/BP_PlayerDodge_Base.BP_PlayerDodge_Base_C:OnEvadeDamage", "onEvade" },
 }
-tl.resultHooked = {}
 tl.hookResults = function()
     for _, e in ipairs(tl.RESULT_FNS) do
-        if not tl.resultHooked[e[1]] then
+        if not RT.installed(e[1]) then
             local ok, pre, post = pcall(RegisterHook, e[1], function(ctx, ...)
+                if tl.stopped then return end
                 local okH, er = pcall(tl[e[2]], ctx, ...)
                 if not okH then tl.err("result hook", er) end
             end)
-            if ok then tl.resultHooked[e[1]] = true RT.rememberHook(e[1], e[1], pre, post) end
+            if ok then RT.rememberHook(e[1], e[1], pre, post) end
             if ok or activationTries == 1 or activationTries == 12 then
                 log("result hook %s: %s", e[1]:match("([%w_ ]+:[%w_ ]+)$") or e[1], ok and "hooked" or tostring(pre))
             end
@@ -4299,14 +4315,15 @@ local function hookActivation()
     tl.try("bullet hook", tl.hookBullets)
     tl.try("result hook", tl.hookResults)
     for _, fn in ipairs(ACTIVATE_FNS) do
-        if not activationHooked[fn] then
+        if not RT.installed(fn) then
             local ok, pre, post = pcall(RegisterHook, fn, function(ctx)
+                if tl.stopped then return end
                 local t0 = settings.perf and os.clock()
                 local okH, e = pcall(onActivate, ctx)
                 if t0 then tl.perfAdd(tl.perf.hooks, os.clock() - t0) end
                 if not okH then tl.err("activation hook", e) end
             end)
-            if ok then activationHooked[fn], tl.activationHooked = true, true RT.rememberHook(fn, fn, pre, post) end
+            if ok then tl.activationHooked = true RT.rememberHook(fn, fn, pre, post) end
             if ok or activationTries == 1 or activationTries == 12 then
                 log("activation hook %s: %s", fn:match("([%w_]+_C:)") or fn, ok and "hooked" or tostring(pre))
             end
@@ -4358,8 +4375,6 @@ end
 -- it (most attacks call it from C++ and are not seen). The calls seen are logged
 -- with the ability and tags; one whose ability name or tags contain a word of
 -- dodge_attacks (auto_defense.txt) marks the next normal hit as one to dodge.
-local attackHooked = false
-
 local function tagName(param)
     local ok, s = pcall(function() return name(unwrap(param).TagName) end)
     return ok and s or "?"
@@ -4388,6 +4403,9 @@ local function onSendFrame(ctx, action, _, _, _, _, strength, direction, _, _, i
 end
 
 local function hookAttacks(deflect)
+    -- the installed record comes first: without this check every tick added a new
+    -- pair of ids and the previous pair could never be removed (audit 2026-11-17 P0)
+    if RT.installed("attack") then return end
     -- a failed attempt retries after 10 s: this used to be a one-way door (audit P0-3)
     if tl.attackHookAt and os.clock() < tl.attackHookAt then return end
     local okC, full = pcall(function() return deflect:GetClass():GetFullName() end)
@@ -4399,10 +4417,11 @@ local function hookAttacks(deflect)
     end
     local hookPath = path .. ":SendDeflectFrame"
     local ok, pre, post = pcall(RegisterHook, hookPath, function(...)
+        if tl.stopped then return end
         local okR, e = pcall(onSendFrame, ...)
         if not okR then log("attack hook error: %s", tostring(e)) end
     end)
-    if ok then RT.rememberHook("attack", hookPath, pre, post) end
+    if ok then RT.rememberHook("attack", hookPath, pre, post) tl.attackHookAt = nil end
     log("attack hook: %s", ok and ("hooked " .. hookPath) or ("not hooked: " .. tostring(pre)))
 end
 
@@ -4429,13 +4448,16 @@ end
 -- 未接线 (audit P2-1): no caller anywhere; kept for the day the cue path is fixed
 local function hookCues()
     for _, fn in ipairs(CUE_FUNCS) do
+        if not RT.installed("cue " .. fn) then
         local ok, pre, post = pcall(RegisterHook, fn, function(...)
+            if tl.stopped then return end
             local okR, e = pcall(onCue, ...)
             if not okR then log("cue hook error: %s", tostring(e)) end
         end)
         if ok then RT.rememberHook("cue " .. fn, fn, pre, post) end
         log("cue hook %s: %s", fn:match(":(.+)$") .. " (" .. (fn:match("GameplayCueNotify_(%w+)") or "?") .. ")",
             ok and "ok" or ("failed: " .. tostring(pre)))
+        end
     end
 end
 
@@ -4781,7 +4803,7 @@ tl.main = function(id)
     local input = component(p, "Ability Input Component")
     currentPawn = p
     local experiments = settings.dodgeAttacks ~= "" or LEARN
-    if deflect and not attackHooked and (DEBUG or experiments) then hookAttacks(deflect) end
+    if deflect and not RT.installed("attack") and (DEBUG or experiments) then hookAttacks(deflect) end
     if deflect and input then tl.decide(p, deflect, input, nowOf(p)) end
     return false
 end
@@ -4821,8 +4843,10 @@ tl.cancelLoop = function(handle)
         end
         return false
     end
-    local ok, cancelled = pcall(CancelDelayedAction, handle)
-    if ok and cancelled ~= false then return true end
+    local ok = pcall(CancelDelayedAction, handle)
+    -- a false answer means the engine no longer knows the handle (it already ran or
+    -- was cleared), which is exactly the outcome wanted; only a throw is a failure
+    if ok then return true end
     if not tl.loopCancelWarned then
         tl.loopCancelWarned = true
         log("main loop: could not cancel previous scheduler handle %s", tostring(handle))
@@ -4926,6 +4950,7 @@ tl.check = function(force)
         if not force then return end
         -- teardown put everything down; a human asking for a restart re-arms it
         tl.stopped, tl.loopDead = false, nil
+        if tl.eventsOpen then pcall(tl.eventsOpen) end
         log("main loop: re-armed after teardown")
     end
     local quiet = os.clock() - tl.tickAt
@@ -4970,6 +4995,8 @@ end
 -- tl.check(true) re-arms the whole thing, so a dead loop is recoverable by hand.
 tl.teardown = function(reason)
     if tl.stopped then return false end
+    -- the gate goes up first: an unregistering hook can fire once more, and a
+    -- decision taken inside teardown's own call stack would otherwise escape it
     tl.stopped = true
     local why = tostring(reason or "requested")
     local loops = 0
@@ -4984,13 +5011,22 @@ tl.teardown = function(reason)
         tl.loopStale = nil
     end
     tl.loopVerifyAt = nil
+    -- backstop for anything not remembered above: one call clears every delayed
+    -- action this mod owns (upstream ClearAllDelayedActions)
+    if type(ClearAllDelayedActions) == "function" then
+        local okC, e = pcall(ClearAllDelayedActions)
+        if not okC then tl.err("delayed clear", e) end
+    end
     local hooks = RT.unhookAll()
     local toastStopped = 0
-    if toast and pcall(toast.cancel, toast) then toastStopped = 1 end
+    if toast and pcall(toast.hide, toast) then toastStopped = 1 end
     if tl.ledFlush then pcall(tl.ledFlush) end
     if tl.eventsFlush then pcall(tl.eventsFlush) end
-    -- drop the handles a late callback could still act on
-    tl.attackHooked, tl.activationHooked = false, false
+    if tl.eventsClose then pcall(tl.eventsClose) end
+    -- drop the state a late callback could still act on, plus the install
+    -- bookkeeping a re-armed mod needs back (activationTries is a 12-attempt budget)
+    tl.activationHooked, tl.attackHookAt = false, nil
+    activationTry, activationTries = 0, 0
     tl.tapPending, tl.receipt = nil, nil
     tl.busIdx = nil
     log("teardown (%s): %d loop(s) cancelled, %d hook(s) removed, %d toast stopped",

@@ -256,7 +256,8 @@ UE4SS 的 Delayed Actions API 在游戏线程执行，返回当前模组所属�
 | `ResetDelayedActionTimer(handle)` / `SetDelayedActionTimer(handle, ms)` | 重置/修改时长 |
 | `IsDelayedActionActive(handle)` | 查询活动状态 |
 | `GetDelayedActionTimeRemaining(handle)` | 查询剩余时间 |
-| `ClearAllDelayedActions()` | 清除当前 MOD 拥有的动作 |
+| `ClearAllDelayedActions()` | 清除**当前 MOD 拥有的全部**动作，返回清除数量；teardown 的兜底工具 |
+| `IsValidDelayedActionHandle(handle)` | 判断 handle 是否还属于一个活动动作 |
 
 ### 4.3 EngineTick 与毫秒轮询的选择
 
@@ -267,7 +268,7 @@ UE4SS 的 Delayed Actions API 在游戏线程执行，返回当前模组所属�
 - 不可用时用 `LoopInGameThreadWithDelay(10, callback)` 等兼容路径。
 - 返回的 handle 要保存；重启/替换循环前取消旧 handle。
 - 仍应保留 generation/token 检查，防止已经排入队列的旧回调在切换边界执行。
-- **成功判据只有一条：调用没有抛错就算已排程，handle 可能是 nil。** 用 `handle ~= nil` 判成功会把「句柄不可用的可用 API」误判成没排程；两条路径（帧/毫秒）的判据必须一致，否则一条会「成功回退」到另一条，行为随 installation 变化。
+- **成功判据只有一条：调用没有抛错就算已排程。** 上游实现恒返回整数 handle（`lua.set_integer(handle); return 1`，`LuaMod.cpp:4834`/`:4780`），所以 `handle ~= nil` 仍然判得出来；真正会「调用即失败」的是 `…AfterFrames` 在 EngineTick 缺失时直接抛错（`LuaMod.cpp:4811-4813`）。两条路径（帧/毫秒）的判据必须一致，否则一条会「成功回退」到另一条，行为随 installation 变化。
 - 「已排程」不等于「在跑」：排程成功后记 `loopVerifyAt = now + 2`，2 s 内没有任何 tick 就换另一条路径并记日志。注意看门狗本身跑在被监视的循环里 —— 完全静默的循环无法自愈，只能靠人工/热键触发的重试路径。
 
 不要简单把 10 ms timer 换成“每帧”便宣称提升 FPS。帧同步主要消除帧间重复采样和不必要唤醒；实际收益需要用同场景的帧间隔、p95/p99、tick 成本和 hitch 数据测量。1 帧回调仍然会消耗当前帧预算。
@@ -320,7 +321,7 @@ local function startLoop(tick)
 end
 ```
 
-本模板为生命周期说明；循环回调是否由返回值停止应按所安装 UE4SS 版本的 Delayed Actions 实现确认，不要用返回 true/false 代替明确的 `CancelDelayedAction` 清理。模板的「不抛错即已排程」与 `Scripts/main.lua` 的 `tl.start` 一致：两条路径走同一个 `schedule(kind)`，失败时把两条路径的原因都写进日志（`main loop scheduler failed: frame (...) ; timer (...)`），不再出现「一条路径报不可用、另一条也静默」的情况。
+本模板为生命周期说明；循环回调的**返回值会被丢弃**（上游调用点是 `exec.lua->call_function(0, 0)`，`LuaMod.cpp:4026`），停循环只有 `CancelDelayedAction`，在回调内部取消自己也是合法的（`LuaMod.cpp:5031`/`:5058`）。模板的「不抛错即已排程」与 `Scripts/main.lua` 的 `tl.start` 一致：两条路径走同一个 `schedule(kind)`，失败时把两条路径的原因都写进日志（`main loop scheduler failed: frame (...) ; timer (...)`），不再出现「一条路径报不可用、另一条也静默」的情况。
 
 ### 4.5 旧接口
 
@@ -330,7 +331,7 @@ end
 
 ### 5.1 RegisterHook
 
-`RegisterHook(fullFunctionPath, preCallback, postCallback)` 注册 UFunction Hook，并返回 PreId/PostId。目标 UFunction 必须在安装时已经存在；不支持 Delegate 函数。
+`RegisterHook(fullFunctionPath, preCallback, postCallback)` 注册 UFunction Hook，返回**两个整数** PreId/PostId（非 native 的蓝图 `ProcessInternal` 目标两个 id 相同，`LuaMod.cpp:4287`）。目标 UFunction 必须在安装时已经存在；不支持 Delegate 函数。
 
 - `/Script/` 路径：第 2 个参数是 pre callback，第 3 个参数是 post callback。
 - 非 `/Script/` 路径：第 2 个参数按文档是 post callback；第 3 个参数不承担通常的 post 参数意义。
@@ -357,7 +358,13 @@ if preId then
 end
 ```
 
-实战要求：先确认 UFunction 已加载；安装失败记录具体函数路径；保存 ID；卸载时反注册；不在高频 Hook 中进行磁盘 IO、全局对象扫描或大量格式化日志。Hook 是对其他模组也可能使用的公共函数的拦截点，不能随意更改返回值或参数。
+取消注册只有一种形式：`UnregisterHook(functionPath, preId, postId)`。它**不返回任何值**，所以只能靠 `pcall` 判断是否抛错：
+
+- arity/类型不对 → 抛错；UFunction 名字查不到 → 抛错；id 匹配不到 → **静默无操作**（不报错）。
+- 注销是**延迟移除**：只把记录标记为 `scheduled_for_removal`，真正的引擎侧注销与 Lua 引用释放发生在该 UFunction 下一次执行时。不过我们的 Lua 回调**立刻失效**（pre 入口早退，post 入口先移除再早退，`LuaMod.cpp:139`/`:241-276`）。
+- 没有全局 `UnregisterHooks()`（上游 `docs/lua-api/global-functions/` 只有 `unregisterhook`）。模组卸载/重载由引擎统一清理（§8）。
+
+实战要求：先确认 UFunction 已加载；安装失败记录具体函数路径；**保存两个 id 和路径**；卸载时三参反注册、失败要保留记录而不是丢掉；不在高频 Hook 中进行磁盘 IO、全局对象扫描或大量格式化日志。Hook 是对其他模组也可能使用的公共函数的拦截点，不能随意更改返回值或参数。
 
 ### 5.2 Hook 重试与安装时机
 
@@ -434,6 +441,8 @@ UE4SS `RegisterKeyBind` 支持：
 
 回调只会在游戏或 Debug Console 获得焦点时触发。若回调要读写 Unreal 对象，应在 callback 中调用 `ExecuteInGameThread`。
 
+**热键无法注销**：UE4SS 没有 `UnregisterKeyBind`，`RegisterKeyBind` 也不返回 id（`LuaMod.cpp:1631`/`:1747`），只有 `IsKeyBindRegistered`。关闭某功能只能靠回调内部的状态闸；teardown 之后按下热键仍会进入回调，所以「按热键做什么」是设计决定（本项目把它当作人工重新武装），不能假装热键被清掉了。
+
 ### 7.2 输入动作不是单个 API
 
 在 PBZ 自动防守场景中，要区分：
@@ -455,7 +464,10 @@ UE4SS `RegisterKeyBind` 支持：
 - 对跨版本/可选对象查询使用受控 pcall；错误日志按原因去重/限流。
 - 日志不要每帧输出；应采用固定上限、缓冲与低频 flush。
 - 每个 Loop/Delayed Action 保存 handle，避免匿名无限循环失控。
-- 每个 RegisterHook 保存两个 hook id；生命周期结束时 UnregisterHook。
+- 每个 RegisterHook 保存 path 与两个 hook id；生命周期结束时按 `UnregisterHook(path, preId, postId)` 反注册，失败的记录要留着重试。
+- 卸载顺序（顺序即契约）：置停止标志 → 停自己的调度 → `ClearAllDelayedActions()` 兜底 → 逐个注销 hook → 停 UI/定时器 → flush 并封口 sink → 清状态表。把「停止标志」放到末尾会在 teardown 自己的调用栈里留下决策窗口。
+- `CancelDelayedAction` 对已自然结束、或已被 `ClearAllDelayedActions` 清掉的 handle 返回 false，这属于成功，不要塞进重试表。
+- 模组被禁用/重载时引擎会清掉该模组的 hook、keybind 与全部延迟动作（`LuaMod.cpp:6137-6300`，keybind 6170-6196、hook 6198-6234、动作 6236-6265）；但进程内的 `dofile` 重读脚本**什么都不清**，两者不能混为一谈。
 - 订阅事件后要有明确取消/清理路径，不能在热重载时累积订阅者。
 - 文件读写、JSON 解析、全量数据索引构建应尽量放到加载期或低频预算中，不要在 parry/dodge 决策点同步做磁盘 IO。
 

@@ -109,20 +109,26 @@ T.start()
 eq(T.loopSchedule, "failed", "missing scheduler APIs are recorded as failed")
 LoopInGameThreadWithDelay = realTimerApi
 EngineTickAvailable = true
--- F2: a handle that cannot be cancelled is remembered and retried, not forgotten.
+-- F2: a handle that throws on cancel is remembered and retried, not forgotten.
 local cancelCalls, cancelFails = 0, true
 CancelDelayedAction = function(h)
     cancelCalls = cancelCalls + 1; _G.__CANCELLED_HANDLE = h
-    return not cancelFails
+    if cancelFails then error("cancel failed") end
+    return true
 end
 T.loopHandle, T.loopStale = 4242, nil
 T.start()
 eq(cancelCalls >= 1, true, "the previous handle is offered for cancellation")
-eq((T.loopStale or {})[1], 4242, "an uncancelled handle is kept for retry")
+eq((T.loopStale or {})[1], 4242, "a handle that could not be cancelled is kept for retry")
 cancelFails = false
 T.loopHandle = _G.__LOOP_HANDLE
 T.start()
 eq(T.loopStale, nil, "the retry list clears once cancelling works")
+-- a false answer means the engine no longer knows the handle: that is success
+CancelDelayedAction = function(h) _G.__CANCELLED_HANDLE = h return false end
+T.loopHandle, T.loopStale = 4243, nil
+T.start()
+eq(T.loopStale, nil, "a handle the engine no longer knows counts as cancelled")
 CancelDelayedAction = realCancelApi
 -- F3: the watchdog says "press a hotkey to retry" - that retry must work.
 T.loopId, T.loopDead, T.tickAt = 25, true, os.clock() - 60
@@ -397,20 +403,25 @@ do
     T.start()
 end
 
--- 1.6.5 (audit P1-4): a hook keeps both ids, and one teardown removes everything
-local seenReg, seenUnreg = {}, {}
+-- 1.6.5 (audit P1-4): a hook keeps both ids, one teardown removes everything, and
+-- the install record - not a separate flag - decides whether a hook is already in
+local seenUnreg, hookCalls = {}, 0
 local realReg, realUnreg = RegisterHook, UnregisterHook
 RegisterHook = function(path)
-    seenReg[#seenReg + 1] = path
+    hookCalls = hookCalls + 1
     return path .. "#pre", path .. "#post"
 end
 UnregisterHook = function(a, b, c)
     seenUnreg[#seenUnreg + 1] = { a, b, c }
 end
-T.hookIds, T.stopped, T.bulletHooked = nil, false, {}
+T.hookIds, T.stopped = nil, false
 T.hookBullets()
+local firstCalls = hookCalls
+eq(firstCalls > 0, true, "the first install registers the bullet hooks")
+T.hookBullets()
+eq(hookCalls, firstCalls, "a second install call adds nothing: the record is the flag")
 eq(type(T.hookIds), "table", "an installed hook is remembered")
-local _, record, records = nil, nil, 0
+local record, records = nil, 0
 for _, v in pairs(T.hookIds) do record, records = v, records + 1 end
 eq(records > 0, true, "at least one hook record exists")
 eq(type(record), "table", "the record is a table, not a bare id")
@@ -425,6 +436,15 @@ eq(_G.__LOOP() == false, true, "a tick after teardown decides nothing")
 eq(T.teardown("test"), false, "a second teardown is a no-op")
 T.check(true)
 eq(T.stopped, false, "a human restart re-arms the mod after teardown")
+T.hookBullets()
+eq(hookCalls > firstCalls, true, "a re-armed mod installs the hooks again")
+-- a failed unregister keeps the record: an id thrown away cannot be retried
+UnregisterHook = function() error("no UFunction with the specified name was found") end
+T.teardown("test2")
+eq(next(T.hookIds or {}) ~= nil, true, "a failed unregister keeps the record for a retry")
+T.check(true)
+eq(T.stopped, false, "the mod is armed again after the second teardown")
+T.hookIds = nil
 RegisterHook, UnregisterHook = realReg, realUnreg
 
 eq(#gaps, 0, "the whole test surface is present: " .. table.concat(gaps, ","))
