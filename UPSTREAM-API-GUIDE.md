@@ -1,5 +1,32 @@
 # 上游 API 与集成参考（UE4SS / PBZModLoader / USMAP）
 
+
+## 完整开发文档索引
+
+此前版本仅概述了三个上游项目和本轮代码变更。详细 API 参考现已拆分成独立手册，建议按“UE4SS 运行时 → PBZ 游戏 API → USMAP 反射工具 → 优化路线图”的顺序阅读。
+
+| 文档 | 内容 | 适用场景 |
+|---|---|---|
+| [UE4SS Lua API 实战参考](docs/UE4SS-LUA-API-REFERENCE.md) | 模组生命周期、UObject 查询与缓存、RemoteUnrealParam、FName、Delayed Actions、EngineTick、RegisterHook、TArray/TMap、输入与性能反模式 | 开发和维护当前 Lua 模组 |
+| [PBZ 游戏反射 API 参考](docs/PBZ-GAME-API-REFERENCE.md) | DeflectComponent、Receive/Send frames、DeflectResultData、AbilityInputComponent、Enhanced Input、PBZModLoader SDK 验证等级、Lua/JS 对照 | 查找游戏类和战斗/输入 API |
+| [PBZ USMAP 工具链指南](docs/PBZ-USMAP-TOOLCHAIN.md) | Live/Offline dump、PBZ 特殊反射布局、USMAP v4/CEXT/PPTH/EATR、合并优先级、质量检查、build.ps1 和排错 | 游戏更新、反射采集和 schema 核验 |
+| [API 优化路线图](docs/API-OPTIMIZATION-ROADMAP.md) | 当前代码 API 映射、已完成优化、候选 API、风险等级、性能 A/B 方法和实机验收标准 | 决定下一项性能/稳定性改进 |
+
+## 推荐阅读路径
+
+1. 先读 [UE4SS Lua API 实战参考](docs/UE4SS-LUA-API-REFERENCE.md)，理解当前运行时的对象、线程和 Hook 语义。
+2. 再读 [PBZ 游戏反射 API 参考](docs/PBZ-GAME-API-REFERENCE.md)，定位 DeflectComponent、AbilityInputComponent 和 SDK 的真实验证等级。
+3. 游戏更新或查字段时使用 [PBZ USMAP 工具链指南](docs/PBZ-USMAP-TOOLCHAIN.md) 核对 native/live/package 映射。
+4. 开始改代码前查看 [API 优化路线图](docs/API-OPTIMIZATION-ROADMAP.md)，避免把未经实测的 Force/Input/Out 参数写入热路径。
+
+### API 变更的证据规则
+
+- UE4SS 文档用于确认框架提供的 Lua API、生命周期和调度行为。
+- PBZModLoader SDK 用于读取当前捕获游戏 build 的类和函数声明；必须看 reflection-generated / binding-confirmed / call-verified 的状态注释。
+- PBZ USMAP 用于核对映射结构、字段类型和来源覆盖，不证明 UE4SS Lua 能调用某个函数。
+- 最终集成仍要通过离线测试、Lua binding 探针、实机战斗验证和性能 A/B。
+
+
 本文记录 PBZ Auto Defense 对照以下三个上游仓库后采用的接口边界、性能策略和验证限制。文档以 2026-11-17 可读取的 `release` / `main` 分支为参考；上游更新后应重新核对函数签名与游戏构建号。
 
 ## 结论：当前运行时仍使用 UE4SS Lua
