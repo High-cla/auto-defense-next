@@ -17,6 +17,8 @@ USMAP 不等于 Lua 可调用的 API 注册表，不证明 UFunction 一定存�
 
 PBZ Auto Defense 当前直接使用 UE4SS Lua 反射对象访问。它不需要在每帧读取 .usmap，也不应将外部进程扫描脚本塞进发布 ZIP。USMAP 只帮助开发者理解和核对游戏 schema。
 
+**此仓库没有单独的 PBZ Game API SDK。** 它提供的是映射文件和映射重建工具。若要找类/函数/属性声明，应使用 [PBZ SDK 与反射资源索引](PBZ-SDK-RESOURCES.md) 中介绍的 PBZModLoader Game API SDK；若要生成 C++ headers，则使用 UE4SS SDK Generator。仓库 README 中的 .NET 10 SDK 只是构建 CUE4Parse 工具的编译依赖。
+
 ## 2. 工具仓库结构
 
 上游：KintaroModding/phantombladezero_pbzusmap
