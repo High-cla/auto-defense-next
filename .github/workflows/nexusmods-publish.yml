@@ -137,7 +137,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   reject-untrusted-dispatch:
-    if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && inputs.operation != 'validate' && github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Reject non-main production dispatch
@@ -275,9 +275,8 @@ jobs:
         id: mod
         run: python3 tools/nexusmods_resolve_mod.py
 
-      # A release can be deleted and re-published with the same tag, which fires
-      # the event again; the guard fails closed when the API cannot prove the
-      # version is new (review nexus P1-2).
+      # The selected release tag can be submitted more than once; the guard
+      # fails closed when the API cannot prove this version is new (review nexus P1-2).
       - name: Refuse to publish a version that already exists
         id: duplicate
         env:
@@ -321,7 +320,7 @@ jobs:
 
   # Run the offline validation gate only when explicitly selected in Actions.
   validate-pr:
-    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'validate' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'validate'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
