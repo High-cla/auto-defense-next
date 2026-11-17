@@ -14,6 +14,14 @@ Versions are the `tl.VERSION` value in `Scripts/main.lua`; the release tag is `v
 - AbilitySystemBlueprintLibrary / GameplayStatics CDO 缺失时安全降级：ascOf 返回 nil，nowOf 返回 0；避免启动/切换阶段因 nil CDO 直接解引用而抛错。
 - 新增四份详细开发文档：UE4SS Lua API 实战参考、PBZ 游戏反射 API 参考、PBZ USMAP 工具链指南，以及 API 优化路线图；README 已加入中英文索引。
 
+代码审查（调度器/查询/门禁/发布工具链）修复：
+
+- 调度器：`LoopInGameThreadWithDelay` 调用成功但返回 nil handle 时，旧代码记一行日志就 return——主循环完全没有被排程，而 `tl.loopSchedule` 还停在旧值；现在只要调用成功就算排程成功，`"failed"` 重新可达。取消旧 handle 失败时不再丢弃它，而是记入 `tl.loopStale` 并在下次启动重试（上限 8 个），避免旧循环整局空转。`tl.check(force)` 新增人工重试参数：热键走 `tl.check(true)`，会重置启动预算并清除 `tl.loopDead`，不再出现「按热键重试」却是空承诺。`alive:` 行新增 `loop <schedule>`，让调度方式可观测。
+- 查询：`ascOf` 把 `IsValid` 探测失败当成「对象无效」，会静默关掉完美弹反/脱手/Sát Khí 且无日志；现在探测失败仍返回 wrapper，并按原因各记一次日志。`nowOf` 失败时记录一次并返回 0（时间决策读 0 至少可查）。`tagLibrary` 在返回前校验 UObject，不再把无效 CDO 交给 `setPerfect`。
+- 门禁：selene 缺失不再静默跳过（`AD_REQUIRE_SELENE=1` 时视为失败，CI 三个 job 都装 selene 0.32.0 并启用）；判定同时要求 `0 errors` 与 `0 parse errors`，失败时打印 `error`/`warning` 行与结尾 Results，不再截断在 20 行；补跑 `tools/test_nexusmods_*.py`（本机 Windows Store 的 `python3` 是空壳，脚本改为按可用性挑解释器）；`tools/run_integration.sh` 加了 trap，成功即清理临时目录，失败保留以便排查。
+- 发布工具链：新增 `tools/nexusmods_check_published.py`（`GET /mod-files/{file_id}/versions`，已发布则跳过 upload-action，响应不可解析时 fail closed）与 10 个离线断言；bootstrap 在 `versions_count` 缺失时拒绝上传；`ci_prepare_test_fixtures.py` 拒绝在旧 TXT 存在而 config 缺失时生成默认配置。
+- 测试：集成套件新增 9 条（nil handle 仍排程、调度记录诚实、缺少 API 记 failed、取消失败入重试表、重试成功后清空、看门狗预算、人工重试重置、死标志清除）；query 套件新增 5 条（无效 walked 对象不外发、IsValid 探测失败仍返回 wrapper 并记一次日志、时钟失败降级为 0 并记录）。当前 365 断言 + selene 0 errors / 3 既有 warning。
+
 ## 1.6.4 — 2026-11-17
 
 修复：在模组菜单里改完设置保存不生效（`Saved/PBZModsMenu-log.txt` 里三次 `ue4ss/pbz-auto-defense: settings not saved`）。

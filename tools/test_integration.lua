@@ -84,6 +84,53 @@ EngineTickAvailable = true
 T.start()
 eq(_G.__CANCELLED_HANDLE, fallbackHandle)
 eq(_G.__LOOP_MODE, "frame")
+
+-- Scheduler hardening (review F1/F2/F3): the happy-path stubs above always
+-- return a handle and always cancel, so none of these cases could fail before.
+local realTimerApi, realCancelApi = LoopInGameThreadWithDelay, CancelDelayedAction
+-- F1: a build that schedules the loop but reports no handle is still scheduled.
+-- The old code logged "timer unavailable" and returned, leaving no loop at all.
+EngineTickAvailable = false
+LoopInGameThreadWithDelay = function(delay, fn)
+    _G.__LOOP, _G.__LOOP_MODE, _G.__LOOP_DELAY_MS = fn, "timer", delay
+    return nil
+end
+T.loopHandle = nil
+T.start()
+eq(type(_G.__LOOP), "function", "a nil handle still schedules the loop")
+eq(T.loopSchedule, "timer", "the schedule record stays honest after a nil handle")
+LoopInGameThreadWithDelay = realTimerApi
+-- F1b: no delayed-action API at all is a recorded failure, not a silent ignore.
+EngineTickAvailable = false
+LoopInGameThreadWithDelay = nil
+T.loopHandle = nil
+T.start()
+eq(T.loopSchedule, "failed", "missing scheduler APIs are recorded as failed")
+LoopInGameThreadWithDelay = realTimerApi
+EngineTickAvailable = true
+-- F2: a handle that cannot be cancelled is remembered and retried, not forgotten.
+local cancelCalls, cancelFails = 0, true
+CancelDelayedAction = function(h)
+    cancelCalls = cancelCalls + 1; _G.__CANCELLED_HANDLE = h
+    return not cancelFails
+end
+T.loopHandle, T.loopStale = 4242, nil
+T.start()
+eq(cancelCalls >= 1, true, "the previous handle is offered for cancellation")
+eq((T.loopStale or {})[1], 4242, "an uncancelled handle is kept for retry")
+cancelFails = false
+T.loopHandle = _G.__LOOP_HANDLE
+T.start()
+eq(T.loopStale, nil, "the retry list clears once cancelling works")
+CancelDelayedAction = realCancelApi
+-- F3: the watchdog says "press a hotkey to retry" - that retry must work.
+T.loopId, T.loopDead, T.tickAt = 25, true, os.clock() - 60
+T.check()
+eq(T.loopId, 25, "the watchdog refuses once the start budget is spent")
+T.check(true)
+eq(T.loopId, 1, "a manual retry resets the budget and restarts the loop")
+eq(T.loopDead, nil, "a manual retry clears the dead flag")
+
 local fake = { GetAddress = function() return 77 end, IsValid = function() return true end,
     ReceiveFrames = { ForEach = function(_, fn)
         fn({ get = function() return 7 end }, { get = function() return { HitGameTime = 100.5, IsDodge = false } end })

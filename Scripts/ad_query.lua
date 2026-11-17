@@ -14,6 +14,16 @@ end
 
 function M.valid(v) return v ~= nil and v:IsValid() end
 
+-- A throwing probe and an invalid object are different states. Treating the
+-- first as the second silently disabled every tag read with no log line at all
+-- (review F4/F6), so each reason is reported once and the object is kept.
+local warned = {}
+local function warnOnce(key, fmt, ...)
+    if warned[key] then return end
+    warned[key] = true
+    logFn(fmt, ...)
+end
+
 -- shared readers: pcall(getv, v) instead of pcall(function() return v:get() end)
 -- keeps the protection and drops one closure per call on the per-frame paths
 local function str(v) return v:ToString() end
@@ -92,8 +102,13 @@ function M.tagLibrary()
             if not tagLib and M.name(o:GetFName()) == "Default__PBZAbilityBlueprintLibrary" then tagLib = o end
         end)
     end
-    if M.valid(tagLib) then logFn("PBZAbilityBlueprintLibrary found at %s", tagLib:GetFullName()) end
-    return tagLib
+    -- The walk can find an object the engine no longer accepts; returning it
+    -- handed an invalid CDO to setPerfect, which then looked like a tag bug.
+    if M.valid(tagLib) then
+        logFn("PBZAbilityBlueprintLibrary found at %s", tagLib:GetFullName())
+        return tagLib
+    end
+    return nil
 end
 
 -- Blueprint property names have spaces ("Deflect Component").
@@ -111,9 +126,17 @@ function M.ascOf(pawn)
     local okLib, lib = pcall(M.obj, "/Script/GameplayAbilities.Default__AbilitySystemBlueprintLibrary")
     if not okLib or lib == nil then return nil end
     local ok, asc = pcall(function() return lib:GetAbilitySystemComponent(pawn) end)
-    if not ok or asc == nil then return nil end
+    if not ok then
+        warnOnce("ascOf.component", "ascOf: GetAbilitySystemComponent failed (%s)", tostring(asc))
+        return nil
+    end
+    if asc == nil then return nil end
     local okValid, alive = pcall(function() return asc:IsValid() end)
-    if okValid and alive then return asc end
+    if not okValid then
+        warnOnce("ascOf.valid", "ascOf: IsValid probe failed (%s); using the wrapper", tostring(alive))
+        return asc
+    end
+    if alive then return asc end
     return nil
 end
 
@@ -122,7 +145,11 @@ function M.nowOf(pawn)
     local okLib, statics = pcall(M.obj, "/Script/Engine.Default__GameplayStatics")
     if not okLib or statics == nil then return 0 end
     local ok, now = pcall(function() return statics:GetTimeSeconds(pawn) end)
-    return ok and now or 0
+    if not ok then
+        warnOnce("nowOf.time", "nowOf: GetTimeSeconds failed (%s); time decisions read 0", tostring(now))
+        return 0
+    end
+    return now or 0
 end
 
 return M

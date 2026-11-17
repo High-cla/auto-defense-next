@@ -4626,7 +4626,9 @@ tl.main = function(id)
     if tl.ticks == 1 then log("main loop running (start %d)", id) tl.aliveAt = t + tl.ALIVE_EVERY end
     if t >= tl.aliveAt then
         tl.aliveAt = t + tl.ALIVE_EVERY
-        log("alive: %d ticks, player %s", tl.ticks, currentPawn and "on" or (tl.cutWhy and ("paused: " .. tl.cutWhy) or "none"))
+        log("alive: %d ticks, player %s, loop %s", tl.ticks,
+            currentPawn and "on" or (tl.cutWhy and ("paused: " .. tl.cutWhy) or "none"),
+            tl.loopSchedule or "none")
         -- 5 s metrics line: the bus drop counter and the policy denials had no
         -- periodic reader, so the "budget alarm" was never observed (audit P1-7)
         if tl.led then
@@ -4686,25 +4688,53 @@ tl.main = function(id)
     end
     return false
 end
+-- One cancel path: never throws, reports once, and tells the caller whether the
+-- handle is really gone (a false answer must be remembered, review F2).
+tl.cancelLoop = function(handle)
+    if handle == nil then return true end
+    if type(CancelDelayedAction) ~= "function" then
+        if not tl.loopCancelWarned then
+            tl.loopCancelWarned = true
+            log("main loop: CancelDelayedAction unavailable; stale callback is generation-guarded")
+        end
+        return false
+    end
+    local ok, cancelled = pcall(CancelDelayedAction, handle)
+    if ok and cancelled ~= false then return true end
+    if not tl.loopCancelWarned then
+        tl.loopCancelWarned = true
+        log("main loop: could not cancel previous scheduler handle %s", tostring(handle))
+    end
+    return false
+end
 tl.start = function()
     tl.loopId, tl.ticks, tl.tickAt = tl.loopId + 1, 0, os.clock()
     local id = tl.loopId
     -- The UE4SS delayed-action API returns an owned handle. Cancel the previous
     -- watchdog loop before replacing it; otherwise a restart leaves a stale timer
     -- waking up forever even though tl.main rejects its old generation id.
+    -- A handle is only forgotten once the cancel is known to have worked: an
+    -- uncancellable loop keeps waking for the rest of the session, so it is kept
+    -- and retried on the next start instead of leaking (review F2).
     if tl.loopHandle ~= nil then
         local previous = tl.loopHandle
         tl.loopHandle = nil
-        if type(CancelDelayedAction) == "function" then
-            local ok, cancelled = pcall(CancelDelayedAction, previous)
-            if (not ok or cancelled == false) and not tl.loopCancelWarned then
-                tl.loopCancelWarned = true
-                log("main loop: could not cancel previous scheduler handle %s", tostring(previous))
-            end
-        elseif not tl.loopCancelWarned then
-            tl.loopCancelWarned = true
-            log("main loop: CancelDelayedAction unavailable; stale callback is generation-guarded")
+        if not tl.cancelLoop(previous) then
+            local stale = tl.loopStale or {}
+            if #stale < 8 then stale[#stale + 1] = previous end
+            tl.loopStale = stale
         end
+    end
+    if tl.loopStale then
+        local keep, kept = {}, 0
+        for i = 1, #tl.loopStale do
+            local handle = tl.loopStale[i]
+            if not tl.cancelLoop(handle) and kept < 8 then
+                kept = kept + 1
+                keep[kept] = handle
+            end
+        end
+        tl.loopStale = kept > 0 and keep or nil
     end
     -- An error in a tick is logged (once per message) and the loop goes on: an
     -- error thrown out of the callback could end the loop for good.
@@ -4739,7 +4769,9 @@ tl.start = function()
 
     if type(LoopInGameThreadWithDelay) == "function" then
         local ok, handle = pcall(LoopInGameThreadWithDelay, 10, tick)
-        if ok and handle ~= nil then
+        -- A successful call means the loop is scheduled. Requiring a handle here
+        -- turned a handle-less but working API into "no loop at all" (review F1).
+        if ok then
             tl.loopHandle, tl.loopSchedule = handle, "timer"
             if tl.loopScheduleLogged ~= "timer" then
                 log("main loop scheduler: 10 ms compatibility timer")
@@ -4748,14 +4780,23 @@ tl.start = function()
             return
         end
         log("main loop scheduler: timer unavailable (%s)", tostring(handle))
-        return
     end
     tl.loopSchedule = "failed"
     log("main loop scheduler failed: no supported UE4SS delayed-action API")
 end
-tl.check = function()
+-- force = a human asked for it (hotkey). It restarts even after the automatic
+-- budget is spent, and resets that budget so the watchdog works again (review F3).
+tl.check = function(force)
     local quiet = os.clock() - tl.tickAt
+    -- A healthy loop must not be restarted by a hotkey press: every restart bumps
+    -- the generation and writes a "main loop running" line (review F3).
     if quiet <= tl.SILENT then return end
+    if force then
+        tl.loopId, tl.loopDead = 0, nil
+        log("main loop: manual restart requested after %.0f s since the last tick", quiet)
+        tl.start()
+        return
+    end
     if tl.loopId < 20 then
         log("main loop silent for %.0f s (%d ticks), starting it again", quiet, tl.ticks)
         tl.start()
@@ -4763,7 +4804,7 @@ tl.check = function()
     end
     if not tl.loopDead then
         tl.loopDead = true
-        log("main loop dead after %d starts: giving up (press a hotkey to retry)", tl.loopId)
+        log("main loop dead after %d starts: automatic restarts stopped (a hotkey forces one more)", tl.loopId)
     end
 end
 -- Configuration changes run before any input decisions, including while in menus.
@@ -4866,7 +4907,7 @@ hk.register = function()
     for _, w in ipairs(hk.order) do
         local _, key, mods = hk.parse(settings.keys[w])
         if key then
-            local fn = function() ExecuteInGameThread(function() tl.check() hk.actions[w]() end) end
+            local fn = function() ExecuteInGameThread(function() tl.check(true) hk.actions[w]() end) end
             if #mods > 0 then RegisterKeyBind(key, mods, fn) else RegisterKeyBind(key, fn) end
         end
     end
