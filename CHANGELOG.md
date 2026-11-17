@@ -13,6 +13,7 @@ Versions are the `tl.VERSION` value in `Scripts/main.lua`; the release tag is `v
 - 通过 PBZModLoader 的 PBZDeflectSystem 反射声明交叉核对 `GetNearestValidReceivedFrame` 签名；未更改尚未实机验证的 out-frame 写回/复用行为。
 - AbilitySystemBlueprintLibrary / GameplayStatics CDO 缺失时安全降级：ascOf 返回 nil，nowOf 返回 0；避免启动/切换阶段因 nil CDO 直接解引用而抛错。
 - 新增四份详细开发文档：UE4SS Lua API 实战参考、PBZ 游戏反射 API 参考、PBZ USMAP 工具链指南，以及 API 优化路线图；README 已加入中英文索引。
+- 进一步核实 SDK 资源：PBZ USMAP 仓库仅提供 mapping/工具链；新增 PBZ SDK 与反射资源索引，收录 PBZModLoader Game API SDK 0.3.3 的 developer ZIP、TypeScript 安装方式，以及 UE4SS C++ SDK Generator 的生成路径与适用范围。
 
 代码审查（调度器/查询/门禁/发布工具链）修复：
 
