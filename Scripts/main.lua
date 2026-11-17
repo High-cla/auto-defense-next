@@ -57,8 +57,7 @@ end
 local Toast = require("toast")
 local toast = Toast.new(60, 200)
 
-local PATH_SEP = package.config and package.config:sub(1, 1) or "\\"
-local MOD_DIR = (debug.getinfo(1, "S").source:gsub("^@", ""):match("^(.*[\\/])") or "") .. ".." .. PATH_SEP
+local MOD_DIR = (debug.getinfo(1, "S").source:gsub("^@", ""):match("^(.*[\\/])") or "") .. "..\\"
 local PERFECT_TAG = "CharacterState.EditorDebug.Deflect.AlwaysPerfect"
 local DODGE_MODES = { "off", "red", "all" }
 local PARRY_WINDOW = 0.08
