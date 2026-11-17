@@ -91,6 +91,10 @@ git commit                   # pre-commit 自动跑同一道门禁
 - [MENU-INTEGRATION.md](MENU-INTEGRATION.md)：菜单字段、重启项、只读项、集成链
 - [AUDIT-2026-11-16.md](AUDIT-2026-11-16.md)：P0–P2 审计项的处置与延后理由
 
+## Nexus Mods 发布
+
+首次上传与 GitHub Actions 自动发布配置见 [NEXUSMODS-PUBLISHING.md](NEXUSMODS-PUBLISHING.md)。
+
 ## License
 
 MIT（见 [LICENSE](LICENSE)）。
