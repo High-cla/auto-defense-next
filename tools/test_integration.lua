@@ -2,6 +2,25 @@
 assert(os.getenv("AD_MENU_TEST") == "1", "requires an isolated test copy")
 local marker = assert(io.open(".ad-menu-test-only", "r"), "refusing to run outside test directory")
 marker:close()
+
+-- The shipped mod targets Windows, where backslashes are path separators.
+-- Normalize file paths only in this isolated POSIX integration-test process.
+local PATH_SEP = package.config and package.config:sub(1, 1) or "\\"
+if PATH_SEP == "/" then
+    local function normalize(path)
+        if type(path) == "string" then return (path:gsub("\\", "/")) end
+        return path
+    end
+    local nativeDofile, nativeLoadfile = dofile, loadfile
+    local nativeOpen, nativeLines = io.open, io.lines
+    local nativeRemove, nativeRename = os.remove, os.rename
+    dofile = function(path) return nativeDofile(normalize(path)) end
+    loadfile = function(path, ...) return nativeLoadfile(normalize(path), ...) end
+    io.open = function(path, ...) return nativeOpen(normalize(path), ...) end
+    io.lines = function(path, ...) return nativeLines(normalize(path), ...) end
+    os.remove = function(path) return nativeRemove(normalize(path)) end
+    os.rename = function(old, new) return nativeRename(normalize(old), normalize(new)) end
+end
 Key = setmetatable({}, { __index = function() return 1 end })
 ModifierKey = setmetatable({}, { __index = function() return 2 end })
 FName = function(s) return { s = s } end

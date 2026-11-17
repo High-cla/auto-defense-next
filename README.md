@@ -96,6 +96,10 @@ git commit                   # pre-commit 自动跑同一道门禁
 - [docs/PBZ-USMAP-TOOLCHAIN.md](docs/PBZ-USMAP-TOOLCHAIN.md)：PBZ USMAP live/offline 采集、映射格式、合并和质量检查
 - [docs/API-OPTIMIZATION-ROADMAP.md](docs/API-OPTIMIZATION-ROADMAP.md)：已完成优化、候选 API 风险分级、性能 A/B 与实机验收
 
+## Nexus Mods 发布
+
+首次上传与 GitHub Actions 自动发布配置见 [NEXUSMODS-PUBLISHING.md](NEXUSMODS-PUBLISHING.md)。
+
 ## License
 
 MIT（见 [LICENSE](LICENSE)）。

@@ -1,0 +1,309 @@
+name: Nexus Mods publish
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/nexusmods-publish.yml'
+      - 'tools/nexusmods_bootstrap.py'
+      - 'tools/nexusmods_resolve_mod.py'
+      - 'tools/ci_prepare_test_fixtures.py'
+      - 'tools/run_integration.sh'
+      - 'tools/test_integration.lua'
+      - 'tools/package.py'
+      - 'tools/package.sh'
+      - 'Scripts/**'
+      - 'data/**'
+      - 'CHANGELOG.md'
+      - 'enabled.txt'
+      - 'pbz-auto-defense.modsmenu.json'
+  # One-time bootstrap. The checkbox must be explicitly enabled by a maintainer.
+  workflow_dispatch:
+    inputs:
+      confirm_initial_upload:
+        description: Confirm the first PBZ Auto Defense upload to Nexus Mods
+        required: true
+        type: boolean
+        default: false
+  # Later versions are uploaded only after a GitHub Release is published.
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nexusmods-pbz-auto-defense
+  cancel-in-progress: false
+
+jobs:
+  initial-upload:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: nexusmods-production
+    env:
+      NEXUSMODS_API_KEY: ${{ secrets.NEXUSMODS_API_KEY }}
+      NEXUSMODS_MOD_ID: ${{ vars.NEXUSMODS_MOD_ID }}
+      NEXUSMODS_FILE_ID_CANDIDATE: ${{ vars.NEXUSMODS_FILE_ID_CANDIDATE }}
+      CONFIRM_INITIAL_UPLOAD: ${{ inputs.confirm_initial_upload }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check first-upload configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$CONFIRM_INITIAL_UPLOAD" != "true" ]]; then
+            echo "Set confirm_initial_upload=true to authorize the first Nexus Mods upload."
+            exit 1
+          fi
+          if [[ -z "$NEXUSMODS_API_KEY" || -z "$NEXUSMODS_MOD_ID" ]]; then
+            echo "Configure NEXUSMODS_API_KEY Secret and NEXUSMODS_MOD_ID variable first."
+            exit 1
+          fi
+
+      - name: Install LuaJIT
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y luajit
+
+      - name: Prepare ignored default config fixtures
+        run: python3 tools/ci_prepare_test_fixtures.py
+      - name: Run project offline test gate
+        run: bash tools/run_all.sh
+
+      - name: Download the published v1.6.4 release archive
+        id: package
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          gh release download v1.6.4 --repo "$GITHUB_REPOSITORY" \
+            --pattern "pbz-auto-defense-v1.6.4.zip" --dir dist
+          archive="dist/pbz-auto-defense-v1.6.4.zip"
+          test -s "$archive"
+          actual_size=$(stat -c '%s' "$archive")
+          actual_sha=$(sha256sum "$archive" | awk '{print $1}')
+          expected_size="285737"
+          expected_sha="eb4745588ca311dc26e84680a2a3b1aa2ae338d0e73cd09a2b992296d221a705"
+          if [[ "$actual_size" != "$expected_size" || "$actual_sha" != "$expected_sha" ]]; then
+            echo "Downloaded v1.6.4 archive does not match the published release asset."
+            echo "Actual size: $actual_size; SHA-256: $actual_sha"
+            exit 1
+          fi
+          unzip -t "$archive"
+          echo "filename=$archive" >> "$GITHUB_OUTPUT"
+
+      - name: Create first Nexus Mods file/version
+        id: bootstrap
+        run: python3 tools/nexusmods_bootstrap.py ${{ steps.package.outputs.filename }}
+
+      - name: Record bootstrap result
+        env:
+          FILE_ID: ${{ steps.bootstrap.outputs.file_id }}
+          VERSION_ID: ${{ steps.bootstrap.outputs.file_version_id }}
+          ALREADY_UPLOADED: ${{ steps.bootstrap.outputs.already_uploaded }}
+        run: |
+          {
+            echo "## Nexus Mods bootstrap result"
+            echo "- File ID: $FILE_ID"
+            echo "- File version ID: $VERSION_ID"
+            echo "- Already uploaded: $ALREADY_UPLOADED"
+            echo "- Set repository variable NEXUSMODS_FILE_ID to the verified file ID before publishing future releases."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  reject-untrusted-dispatch:
+    if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reject non-main production dispatch
+        run: |
+          echo 'The Nexus Mods first-upload workflow must be dispatched from refs/heads/main.'
+          exit 1
+
+  publish-update:
+    if: github.event_name == 'release' && github.event.action == 'published'
+    runs-on: ubuntu-latest
+    environment: nexusmods-production
+    env:
+      NEXUSMODS_API_KEY: ${{ secrets.NEXUSMODS_API_KEY }}
+      NEXUSMODS_FILE_ID: ${{ vars.NEXUSMODS_FILE_ID }}
+      NEXUSMODS_MOD_ID: ${{ vars.NEXUSMODS_MOD_ID }}
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+
+      - name: Require first-upload setup
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$NEXUSMODS_API_KEY" || -z "$NEXUSMODS_FILE_ID" || -z "$NEXUSMODS_MOD_ID" ]]; then
+            echo "Configure NEXUSMODS_API_KEY, NEXUSMODS_MOD_ID and NEXUSMODS_FILE_ID before publishing."
+            exit 1
+          fi
+
+      - name: Install LuaJIT
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y luajit
+
+      - name: Prepare ignored default config fixtures
+        run: python3 tools/ci_prepare_test_fixtures.py
+      - name: Run project offline test gate
+        run: bash tools/run_all.sh
+
+      - name: Build release ZIP and verify tag
+        id: package
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          bash tools/package.sh
+          archive_count=$(find dist -maxdepth 1 -type f -name 'pbz-auto-defense-v*.zip' | wc -l)
+          if [ "$archive_count" -ne 1 ]; then
+            echo "Expected exactly one PBZ Auto Defense release ZIP."
+            exit 1
+          fi
+          archive=$(find dist -maxdepth 1 -type f -name 'pbz-auto-defense-v*.zip' -print)
+          archive_version=$(basename "$archive" | sed 's/^pbz-auto-defense-v//; s/\.zip$//')
+          expected_version=$(printf '%s' "$RELEASE_TAG" | sed 's/^v//')
+          if [ "$archive_version" != "$expected_version" ]; then
+            echo "Release tag does not match tl.VERSION in the packaged source."
+            exit 1
+          fi
+          unzip -t "$archive"
+          sha256sum "$archive"
+          echo "filename=$archive" >> "$GITHUB_OUTPUT"
+          echo "version=$archive_version" >> "$GITHUB_OUTPUT"
+
+      - name: Extract this release changelog section
+        id: release-notes
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.package.outputs.version }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          import uuid
+          from pathlib import Path
+
+          version = os.environ["RELEASE_VERSION"]
+          lines = Path("CHANGELOG.md").read_text(encoding="utf-8").splitlines()
+          header = re.compile(r"^##\s+" + re.escape(version) + r"(?:\s|$)")
+          start = next((i for i, line in enumerate(lines) if header.match(line)), None)
+          if start is None:
+              raise SystemExit(f"CHANGELOG.md has no section for {version}")
+          end = next((i for i in range(start + 1, len(lines)) if lines[i].startswith("## ")), len(lines))
+          notes = "\n".join(lines[start + 1:end]).strip()
+          if not notes:
+              raise SystemExit(f"CHANGELOG.md section for {version} is empty")
+          delimiter = "CHANGELOG_" + uuid.uuid4().hex
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"changelog<<{delimiter}\n")
+              output.write(notes + "\n")
+              output.write(delimiter + "\n")
+          PY
+
+      - name: Resolve internal Nexus API mod ID
+        id: mod
+        run: python3 tools/nexusmods_resolve_mod.py
+
+      - name: Upload new file version to Nexus Mods
+        id: upload
+        uses: Nexus-Mods/upload-action@98532f7670c27cbecc78fae03fa3e278147827e2
+        with:
+          api_key: ${{ secrets.NEXUSMODS_API_KEY }}
+          file_id: ${{ vars.NEXUSMODS_FILE_ID }}
+          mod_id: ${{ steps.mod.outputs.api_mod_id }}
+          filename: ${{ steps.package.outputs.filename }}
+          display_name: PBZ Auto Defense
+          description: >-
+            PBZ Auto Defense for Phantom Blade Zero (Steam build 26367565).
+            Requires UE4SS v4.0.0 or newer.
+          version: ${{ steps.package.outputs.version }}
+          category: main
+          primary_mod_manager_download: true
+          allow_mod_manager_download: true
+          show_requirements_pop_up: false
+          update_mod_version: true
+          changelog: ${{ steps.release-notes.outputs.changelog }}
+
+      - name: Record Nexus Mods result
+        env:
+          VERSION_ID: ${{ steps.upload.outputs.version_id }}
+          RELEASE_VERSION: ${{ steps.package.outputs.version }}
+          ARCHIVE: ${{ steps.package.outputs.filename }}
+        run: |
+          {
+            echo "## Nexus Mods release complete"
+            echo "- Version: $RELEASE_VERSION"
+            echo "- Nexus file version ID: $VERSION_ID"
+            echo "- Archive: $ARCHIVE"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  validate-pr:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Install LuaJIT
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y luajit
+      - name: Compile packaging and bootstrap scripts
+        run: python -m py_compile tools/package.py tools/nexusmods_bootstrap.py tools/nexusmods_resolve_mod.py tools/test_nexusmods_resolve_mod.py tools/ci_prepare_test_fixtures.py
+      - name: Validate menu descriptor JSON
+        run: python -m json.tool pbz-auto-defense.modsmenu.json > /dev/null
+      - name: Test Nexus mod/file identity guard
+        run: python tools/test_nexusmods_resolve_mod.py
+      - name: Prepare ignored default config fixtures
+        run: python3 tools/ci_prepare_test_fixtures.py
+      - name: Run project offline test gate
+        run: bash tools/run_all.sh
+      - name: Build and inspect release ZIP
+        run: |
+          set -euo pipefail
+          bash tools/package.sh
+          archive=$(find dist -maxdepth 1 -type f -name 'pbz-auto-defense-v*.zip' -print)
+          test -n "$archive"
+          unzip -t "$archive"
+          python - "$archive" <<'PY'
+          import sys, zipfile
+          with zipfile.ZipFile(sys.argv[1]) as archive:
+              names = set(archive.namelist())
+              assert 'pbz-auto-defense/Scripts/main.lua' in names
+              assert 'pbz-auto-defense/data/ad_data.lua' in names
+              assert 'pbz-auto-defense/enabled.txt' in names
+              assert 'pbz-auto-defense/pbz-auto-defense.modsmenu.json' in names
+              assert not any('/tests/' in name or '/tools/' in name for name in names)
+          print('Release ZIP contents validated.')
+          PY
+
+      - name: Verify the published v1.6.4 bootstrap asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist-bootstrap
+          gh release download v1.6.4 --repo "$GITHUB_REPOSITORY" \
+            --pattern "pbz-auto-defense-v1.6.4.zip" --dir dist-bootstrap
+          archive="dist-bootstrap/pbz-auto-defense-v1.6.4.zip"
+          test -s "$archive"
+          actual_size=$(stat -c '%s' "$archive")
+          actual_sha=$(sha256sum "$archive" | awk '{print $1}')
+          test "$actual_size" = "285737"
+          test "$actual_sha" = "eb4745588ca311dc26e84680a2a3b1aa2ae338d0e73cd09a2b992296d221a705"
+          unzip -t "$archive"
+          echo "Published v1.6.4 bootstrap asset verified."
