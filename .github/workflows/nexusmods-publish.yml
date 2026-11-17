@@ -8,6 +8,7 @@ on:
       - 'tools/nexusmods_resolve_mod.py'
       - 'tools/ci_prepare_test_fixtures.py'
       - 'tools/run_integration.sh'
+      - 'tools/test_integration.lua'
       - 'tools/package.py'
       - 'tools/package.sh'
       - 'Scripts/**'
