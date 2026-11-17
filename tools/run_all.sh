@@ -3,7 +3,7 @@
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 fail=0
-for t in test_policy test_async test_timeline test_menu_config test_menu_bridge; do
+for t in test_policy test_async test_timeline test_query test_menu_config test_menu_bridge; do
     if out=$(luajit "tools/$t.lua" 2>&1); then
         printf '%-20s %s\n' "$t" "$(printf '%s' "$out" | tail -1)"
     else
