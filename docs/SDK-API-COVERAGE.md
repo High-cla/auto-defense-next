@@ -112,3 +112,38 @@
 
 > 结论：三条**仍未取得实机结论**，需要重启游戏用当前构建再跑一局（`debug=on`）。
 > 这一轮的收获不是 SDK 行为，而是「探针会沉默」：没调用、被门挡住、答案一致，三种沉默必须能被日志区分开。
+
+### 7.2 第二次实机（2026-11-18 05:15:54–05:17:36，探针可见性修复后）
+
+同样的 `debug=on`，这次三条探针都有输出，其中两条直接给出了结论：
+
+| # | 读数 | 结论 |
+|---|---|---|
+| 3 | `SENDARGS n=1 own=0 enemy=0 bullet=userdata:BP_Bullet_BaiheDisciple_FishingNet_Grenade_C rotation=userdata yaw=0.00 yawrange=0.0..0.0 kinds=userdata:BP_Bullet_…Grenade_C`（n=2、3 同理） | **参数类型确认**：`bullet` 是对象 userdata（`:GetClass()` 读得到具体 `BP_Bullet_*` 类），`rotation` 是 userdata 但四次读法全得 `0.00` —— 三个样本都是弹丸/延迟弹反类攻击，方向不在这条参数上。`own=0 enemy=2`：本模组自家 component 一次都没走这条 hook，之前「早退挡住探针」的猜测**未被证实**，真正的原因是探针位置在日志点之后。 |
+| 2 | `deflect hold: game=false keys=false -> false (game, held -1.00s)` ×3；`metrics: … hold=1450/1450` | **`SGameInput.IsHolding(IA_Deflect)` 可读、有答案**：组件字段名正确，返回值是布尔，`GetHoldTime` 未按住时给 `-1`。1450 次提问全部拿到游戏答案（`known==asks`）。仍缺「`IsHolding` 是否看见本模组注入」的证据：需要一次**注入窗口内**的采样。 |
+| 1 | `TMR GA_…_C frames=[] prehit=? -> frames unreadable` ×8（另 1 行仍是 `LGAAction_*`） | **招式对象上没有这些字段**：`SendFrameTimes`/`PreHitPointDuration` 不在 `GA_*` 上。这与 SDK 声明一致（见 7.3），不是游戏行为问题。 |
+
+### 7.3 静态结论：时间点在 action 上，不在 ability 上
+
+`sdk/types/generated/PBZDeflectSystem.d.ts` 的 `LGAAction_DurationBulletWithDeflectBase`（`data.SourceAction` 的运行时类
+`LGAAction_DurationBulletWithDeflect` 正是它）声明了全部时间字段：
+
+```
+PreHitPointDuration, RuntimePreHitPointDuration: number
+SendFrameTimes, StartBulletTimes, EndBulletTimes: TArray<number>
+BulletDuration: number, BulletRepetitions: number
+DeflectBulletType: EDeflectBulletType
+AttackDirection: Rotator, DeflectRadius/Angle/Knockback: number
+CounterAbility: Class, Bullets: TArray<BulletInterface>
+GetEffectiveBulletData();  $Static.GetTimes(Array, ElapsedTime, Next, End, $Ref<TArray<number>>)
+```
+
+而 `DeflectReceiveFrame`（帧扫描读到的那张表）**没有** `AttackDirection`，只有 `DeflectSendFrame` 有——
+所以「`rotation` 的 Yaw 总是 0」与「方向要从 action 取」是同一件事。
+
+据此把探针改成 `ACTN` 行（`tl.tmrAction`）：读 `SendFrameTimes/StartBulletTimes/EndBulletTimes`、
+`Pre/RuntimePreHitPointDuration`、`BulletDuration/Repetitions`、`AttackDirection.Yaw`，
+并沿 Outer 链找第一个等于 timeline 键的外层类，把该 action 的时间数组与 `hit_times.txt` 逐项比较，
+判词与 `TMR` 相同。动作发送期间数组才填值，所以每局最多 8 个 action 会在首帧到达 0.6 s 后二次读取。
+这一条真正要回答的问题是：**`hit_times.txt` 能否退役**（若 `same clock`/`constant offset` 成立即可）。
+

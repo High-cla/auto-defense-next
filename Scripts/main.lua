@@ -2459,6 +2459,65 @@ tl.tmrProbe = function(cls, src)
         tl.tmrJoin(data), max, spread, verdict)
 end
 
+-- The action, not the ability, is what carries the timing. SDK 0.3.3 declares on
+-- LGAAction_DurationBulletWithDeflectBase (PBZDeflectSystem.d.ts): SendFrameTimes,
+-- StartBulletTimes, EndBulletTimes (TArray<number>), PreHitPointDuration,
+-- RuntimePreHitPointDuration, BulletDuration, BulletRepetitions, DeflectBulletType,
+-- AttackDirection. Probing the activated GA_* ability instead returned frames=[] and
+-- prehit=? for eight classes in one session: those fields are not on the ability.
+tl.tmrField = function(o, k)
+    local ok, v = pcall(function() return o[k] end)
+    return ok and v or nil
+end
+tl.tmrYawOf = function(rot)
+    if rot == nil then return nil end
+    local yaw = tonumber(tl.tmrField(rot, "Yaw"))
+    if yaw == nil then
+        local ok, u = pcall(unwrap, rot)
+        yaw = ok and tonumber(tl.tmrField(u, "Yaw")) or nil
+    end
+    return yaw
+end
+-- the action is a sub-object of the ability: the first outer whose class name is a
+-- timeline key is the name the learned table is stored under
+tl.tmrKey = function(names, times)
+    for i = 1, #names do
+        local raw = names[i]
+        if raw and times[raw] then return raw end
+        local base = RT.bname(raw or "")
+        if base and times[base] then return base end
+    end
+    return nil
+end
+tl.tmrAction = function(cls, src)
+    local function num(k) return tonumber(tl.tmrField(src, k)) end
+    local send = tl.tmrNums(tl.tmrField(src, "SendFrameTimes"))
+    local start = tl.tmrNums(tl.tmrField(src, "StartBulletTimes"))
+    local ended = tl.tmrNums(tl.tmrField(src, "EndBulletTimes"))
+    local names, cur = {}, src
+    for _ = 1, 8 do
+        local ok, outer = pcall(function() return cur:GetOuter() end)
+        if not ok or not valid(outer) then break end
+        local okC, c = pcall(function() return short(outer:GetClass()) end)
+        if okC and c then names[#names + 1] = c end
+        cur = outer
+    end
+    local key = tl.tmrKey(names, hitTimes)
+    local hits, data = key and hitTimes[key], {}
+    for i = 1, math.min(#(hits or {}), 8) do
+        local h = hits[i]
+        data[#data + 1] = type(h) == "number" and h or h[1]
+    end
+    local frames = #send > 0 and send or start
+    local verdict, max, spread = tl.tmrVerdict(frames, data)
+    tl.probeLog("ACTN %s send=[%s] start=[%s] end=[%s] pre=%s rpre=%s dur=%s reps=%s yaw=%s outer=%s key=%s -> %s (max %.3f spread %.3f)",
+        cls, tl.tmrJoin(send), tl.tmrJoin(start), tl.tmrJoin(ended),
+        num("PreHitPointDuration") or "?", num("RuntimePreHitPointDuration") or "?",
+        num("BulletDuration") or "?", num("BulletRepetitions") or "?",
+        tl.tmrYawOf(tl.tmrField(src, "AttackDirection")) or "?",
+        #names > 0 and table.concat(names, ">") or "-", key or "-", verdict, max, spread)
+end
+
 -- SendDeflectFrame argument shapes (debug only): the SDK pins the order of the 11
 -- arguments, not the runtime type of Bullet / AttackRotation, and a wrong read
 -- there is silent. Types and the yaw range, a few lines per session.
@@ -2542,11 +2601,11 @@ tl.probeFrames = function(pawn, deflect, now)
                     by = tl.probeAttacker(src)
                     if not tl.tmrSeen[srcName] then
                         tl.tmrSeen[srcName] = true
-                        tl.tmrProbe(srcName, src)
+                        tl.tmrAction(srcName, src)
                     end
                 end
                 local okT, st = pcall(function() return data.DeflectStrength.TagName:ToString() end)
-                e = { hit = known and hit or nil, first = now }
+                e = { hit = known and hit or nil, first = now, src = src, cls = srcName }
                 pr.seen[handle] = e
                 tl.probeLog("FRAME+ h=%d %s dodge=%s isHit=%s type=%s strength=%s src=%s by %s", handle,
                     known and string.format("hit at %.2f (in %+.2fs)", hit, hit - now) or "hit time not set",
@@ -2569,6 +2628,19 @@ tl.probeFrames = function(pawn, deflect, now)
             e.gone = true
             tl.probeLog("FRAME- h=%d gone at %.2f%s (seen %.2fs)", handle, now,
                 e.hit and string.format(", hit was %.2f (%+.2fs)", e.hit, e.hit - now) or ", hit time never set", now - e.first)
+        end
+    end
+    -- second look: the action fills its time arrays while it sends, so a class read
+    -- at the instant the first frame arrives can still be empty. Eight actions per
+    -- session, once each, and only after the send has had time to happen.
+    if (pr.looks or 0) < 8 then
+        for _, e in pairs(pr.seen) do
+            if e.src and not e.look2 and e.first and now - e.first > 0.6 then
+                e.look2 = true
+                pr.looks = (pr.looks or 0) + 1
+                tl.tmrAction(e.cls or "?", e.src)
+                if pr.looks >= 8 then break end
+            end
         end
     end
     -- forget long-gone handles (the game reuses numbers)
@@ -4256,14 +4328,6 @@ local function onActivate(ctx)
     local actor = avatarOf(ab)
     if not actor or actor:GetAddress() == currentPawn:GetAddress() then return end
     local n = short(ab:GetClass())
-    -- debug only: the frames path only ever sees LGAAction_* wrappers, whose names are
-    -- not timeline keys; an activated enemy ability is the object that has both a
-    -- GA_* name and frame times, and 40 classes are enough to judge the clock
-    if DEBUG and not tl.tmrSeen[n] and (tl.tmrN or 0) < 40 then
-        tl.tmrSeen[n] = true
-        tl.tmrN = (tl.tmrN or 0) + 1
-        tl.tmrProbe(n, ab)
-    end
     local tlNote = queueTimeline(ab, n, actor, currentPawn, "hook")
     -- a grab with its ExecutionTimeline in hit_times.txt is handled there (its
     -- red grab hit comes seconds in, after hits that are parried: test10h

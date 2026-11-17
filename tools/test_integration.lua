@@ -293,6 +293,15 @@ do
     -- "never called"; a typo here would read as nil in the metrics line
     eq(T.sendProbe.own, 0, "the own-component counter starts at zero")
     eq(T.sendProbe.enemy, 0, "the enemy counter starts at zero")
+    -- the timing lives on the action (SDK: LGAAction_DurationBulletWithDeflectBase),
+    -- and the timeline is keyed by the ability, so the outer chain is what links them
+    eq(T.tmrKey({ "BP_Foo_C", "GA_Bar_C" }, { GA_Bar = { 0.5 } }), "GA_Bar",
+        "the first outer class the timeline knows is the key")
+    eq(T.tmrKey({ "BP_Foo_C" }, { GA_Bar = { 0.5 } }), nil, "no known outer, no key")
+    eq(T.tmrYawOf({ Yaw = 12.5 }), 12.5, "a plain rotator field is read")
+    eq(T.tmrYawOf(nil), nil, "no rotator, no yaw")
+    eq(T.tmrField({ N = 3 }, "N"), 3, "a field read that never throws")
+    eq(T.tmrField({}, "N"), nil, "a missing field reads as nil")
 end
 
 -- A (P0-3): the decision chain's early exits. The fake Deflect Component answers
