@@ -11,6 +11,8 @@ initial-menu.config.json
 backup/
 tools/out/
 dist/
+__pycache__/
+*.pyc
 # learned data churns every session; it belongs to the player, not to the repo
 hit_times.txt
 learned_hits.txt

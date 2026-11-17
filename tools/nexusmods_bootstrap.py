@@ -149,6 +149,10 @@ def main():
         raise RuntimeError("Multiple PBZ Auto Defense file entries found; resolve duplicates manually.")
     if named and candidate and str(named[0].get("id", "")) != candidate:
         raise RuntimeError("Existing PBZ Auto Defense file ID differs from the supplied candidate ID.")
+    if named and "versions_count" not in named[0]:
+        # Absence is not zero: treating it as "no versions yet" silently creates a
+        # second version of a file that may already have releases (review P1-1).
+        raise RuntimeError("Get Mod Files response has no versions_count; refusing to risk a duplicate upload.")
     if named and int(named[0].get("versions_count", 0) or 0) > 0:
         file_id = str(named[0]["id"])
         output({"file_id": file_id, "file_version_id": "", "already_uploaded": "true"})

@@ -206,7 +206,7 @@ end
 - Ability 当前允许激活；
 - 输入状态没有被其他模组接管。
 
-业务条件必须独立判定。PBZ Auto Defense 的循环在暂停/无 Pawn 时清除当前角色上下文，并在每帧刷新 PBZPerfectDefense 协作状态，而不只依赖 UObject 有效性。
+业务条件必须独立判定。PBZ Auto Defense 的循环在暂停/无 Pawn 时清除当前角色上下文，并每 2 秒重读一次 PBZPerfectDefense 协作状态（`tl.pd.tick` 的节流间隔），而不只依赖 UObject 有效性。
 
 ## 4. 游戏线程、定时器与帧调度
 

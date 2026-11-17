@@ -1,7 +1,7 @@
 ---
 # UE4SS (Unreal Engine 4/5 Scripting System) exposes a set of engine-level globals to
-# every Lua mod. The game runs Lua 5.4 (collectgarbage("generational") and the two-argument
-# math.atan both work there), so selene checks against lua54 plus this list.
+# every Lua mod. The game runs Lua 5.4, but selene's built-in stdlibs are lua51/lua52/lua53 only,
+# so this checks against lua51 plus the 5.4 calls and the engine globals listed below.
 base: lua51
 globals:
   ExecuteInGameThread:

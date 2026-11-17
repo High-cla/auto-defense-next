@@ -4,13 +4,9 @@ on:
   pull_request:
     paths:
       - '.github/workflows/nexusmods-publish.yml'
-      - 'tools/nexusmods_bootstrap.py'
-      - 'tools/nexusmods_resolve_mod.py'
-      - 'tools/ci_prepare_test_fixtures.py'
-      - 'tools/run_integration.sh'
-      - 'tools/test_integration.lua'
-      - 'tools/package.py'
-      - 'tools/package.sh'
+      - 'tools/**'
+      - 'selene.toml'
+      - 'ue4ss.yml'
       - 'Scripts/**'
       - 'data/**'
       - 'CHANGELOG.md'
@@ -67,9 +63,20 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y luajit
 
+      - name: Install selene
+        run: |
+          set -euo pipefail
+          curl -sSL -o /tmp/selene.zip \
+            https://github.com/Kampfkarren/selene/releases/download/0.32.0/selene-0.32.0-linux.zip
+          unzip -o -q /tmp/selene.zip -d /tmp/selene
+          sudo install /tmp/selene/selene /usr/local/bin/selene
+          selene --version
+
       - name: Prepare ignored default config fixtures
         run: python3 tools/ci_prepare_test_fixtures.py
       - name: Run project offline test gate
+        env:
+          AD_REQUIRE_SELENE: "1"
         run: bash tools/run_all.sh
 
       - name: Download the published v1.6.4 release archive
@@ -152,9 +159,20 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y luajit
 
+      - name: Install selene
+        run: |
+          set -euo pipefail
+          curl -sSL -o /tmp/selene.zip \
+            https://github.com/Kampfkarren/selene/releases/download/0.32.0/selene-0.32.0-linux.zip
+          unzip -o -q /tmp/selene.zip -d /tmp/selene
+          sudo install /tmp/selene/selene /usr/local/bin/selene
+          selene --version
+
       - name: Prepare ignored default config fixtures
         run: python3 tools/ci_prepare_test_fixtures.py
       - name: Run project offline test gate
+        env:
+          AD_REQUIRE_SELENE: "1"
         run: bash tools/run_all.sh
 
       - name: Build release ZIP and verify tag
@@ -215,8 +233,18 @@ jobs:
         id: mod
         run: python3 tools/nexusmods_resolve_mod.py
 
+      # A release can be deleted and re-published with the same tag, which fires
+      # the event again; the guard fails closed when the API cannot prove the
+      # version is new (review nexus P1-2).
+      - name: Refuse to publish a version that already exists
+        id: duplicate
+        env:
+          RELEASE_VERSION: ${{ steps.package.outputs.version }}
+        run: python3 tools/nexusmods_check_published.py
+
       - name: Upload new file version to Nexus Mods
         id: upload
+        if: steps.duplicate.outputs.already_published != 'true'
         uses: Nexus-Mods/upload-action@98532f7670c27cbecc78fae03fa3e278147827e2
         with:
           api_key: ${{ secrets.NEXUSMODS_API_KEY }}
@@ -236,6 +264,7 @@ jobs:
           changelog: ${{ steps.release-notes.outputs.changelog }}
 
       - name: Record Nexus Mods result
+        if: steps.duplicate.outputs.already_published != 'true'
         env:
           VERSION_ID: ${{ steps.upload.outputs.version_id }}
           RELEASE_VERSION: ${{ steps.package.outputs.version }}
@@ -262,15 +291,31 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y luajit
+
+      - name: Install selene
+        run: |
+          set -euo pipefail
+          curl -sSL -o /tmp/selene.zip \
+            https://github.com/Kampfkarren/selene/releases/download/0.32.0/selene-0.32.0-linux.zip
+          unzip -o -q /tmp/selene.zip -d /tmp/selene
+          sudo install /tmp/selene/selene /usr/local/bin/selene
+          selene --version
       - name: Compile packaging and bootstrap scripts
-        run: python -m py_compile tools/package.py tools/nexusmods_bootstrap.py tools/nexusmods_resolve_mod.py tools/test_nexusmods_resolve_mod.py tools/ci_prepare_test_fixtures.py
+        run: |
+          python -m py_compile tools/package.py tools/nexusmods_bootstrap.py tools/nexusmods_resolve_mod.py \
+            tools/nexusmods_check_published.py tools/test_nexusmods_resolve_mod.py \
+            tools/test_nexusmods_check_published.py tools/ci_prepare_test_fixtures.py
       - name: Validate menu descriptor JSON
         run: python -m json.tool pbz-auto-defense.modsmenu.json > /dev/null
       - name: Test Nexus mod/file identity guard
         run: python tools/test_nexusmods_resolve_mod.py
+      - name: Test published-version guard
+        run: python tools/test_nexusmods_check_published.py
       - name: Prepare ignored default config fixtures
         run: python3 tools/ci_prepare_test_fixtures.py
       - name: Run project offline test gate
+        env:
+          AD_REQUIRE_SELENE: "1"
         run: bash tools/run_all.sh
       - name: Build and inspect release ZIP
         run: |

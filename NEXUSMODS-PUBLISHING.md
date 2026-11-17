@@ -77,6 +77,8 @@ workflow 将会：
 6. workflow 通过 tools/nexusmods_resolve_mod.py 把页面数字 ID 解析为 API 内部 mod ID，再提取 CHANGELOG.md 当前版本小节，调用官方 Nexus-Mods/upload-action 上传到 NEXUSMODS_FILE_ID 并写 changelog。
 7. workflow Summary 记录 Nexus file version ID。
 
+第 6 步与上传之间还有一道去重门：`tools/nexusmods_check_published.py` 调用 `GET /mod-files/{NEXUSMODS_FILE_ID}/versions`。若目标版本已在列表里，job 跳过官方 upload-action 并在 Summary 写明「已发布」，不产生第二个同版本文件；若响应无法解析出任何版本列表，脚本 fail closed（拒绝上传），而不是把未知当成「还没发布」。存在这道门的原因很直接：删掉并重建同名 Release 会再次触发 `release.published`。首次 bootstrap 也改成 fail closed——`versions_count` 字段缺失时不再当作 0。
+
 不要用首次 bootstrap workflow 发布常规更新。后续更新只由 release.published 触发。
 
 ## 4. 首次文件设置
@@ -98,6 +100,8 @@ ZIP 只包含游戏运行时文件：Scripts/*.lua、data/ad_data.lua、enabled.
 - 上传会话创建后，如果后续 API 请求失败，可能留下未完成的会话。重试前检查 Nexus Mods 页面和 workflow Summary。
 - Changelog API 是追加式。后续 Action 部分成功后重跑可能重复追加 changelog；重试前先检查现有记录。
 - 文件描述保持在 255 字符以内。
+- `tools/ci_prepare_test_fixtures.py` 只在没有旧 `auto_defense.txt` 时才生成默认 config；目录里已有旧 TXT 而缺 config 时它直接拒绝并提示，避免默认 config 把玩家旧调参永久遮蔽（本地运行同样适用，CI 是干净 checkout 不受影响）。
+- CI 把 selene 当必需项：三个 job 都安装 selene 0.32.0，并以 `AD_REQUIRE_SELENE=1` 运行 `tools/run_all.sh`；本地没装 selene 时门禁打印 SKIPPED，不再静默跳过。
 
 ## 参考资料
 

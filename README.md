@@ -8,7 +8,7 @@
 - **自动闪避**：红/黑闪时序判定 + 招式时间线，检查无敌帧覆盖；带闪避间隔、动作锁避让与失败丢弃。
 - **抓投应对**：独立提前量，已收录的非抓投招式不会误用抓投提前量。
 - **防守让位**：`pbzpd=auto` 检测 PBZPerfectDefense 的配置文件与启用状态，自动交出 guard 相关控制，保留闪避与时间线闪避。
-- **原生菜单**：41 个字段（38 个可编辑），热改约 1 秒内生效；重启项在菜单与本文档中都标注。
+- **原生菜单**：41 个字段（39 个可编辑），热改约 1 秒内生效；重启项在菜单与本文档中都标注。
 - **可观测**：防守决策账本、进程内事件环、perf 分位数与统一错误通道。
 
 ## 安装
@@ -26,13 +26,14 @@
 
 | key | 默认 | 说明 |
 |---|---|---|
-| `perfect` / `parry` | on | 完美弹反 / 自动弹反总开关（热改） |
+| `perfect` / `parry` | off / on | 完美弹反 / 自动弹反总开关（热改） |
 | `parry_lead` | auto | 弹反提前量模式；`parry_lead_seconds` 为手动值 |
 | `dodge` | red | 闪避模式：`off` / `red` / `all`（`all` 同时处理黑闪） |
-| `dodge_lead_ms` | 120 | 闪避提前量 |
-| `dodge_gap_ms` | 220 | 两次闪避最小间隔 |
-| `grab_lead_ms` | 350 | 抓投提前量 |
-| `min_gap_ms` | 90 | 弹反最小间隔 |
+| `dodge_lead_ms` | 80 | 闪避提前量 |
+| `dodge_gap_ms` | 120 | 两次闪避最小间隔 |
+| `dodge_iframe_ms` | 260 | 闪避无敌帧覆盖 |
+| `grab_lead_ms` | 240 | 抓投提前量 |
+| `min_gap_ms` | 120 | 弹反最小间隔 |
 | `pbzpd` | auto | PBZPerfectDefense 让位（auto / yield / off，重启项） |
 | `data` | on | 加载招式数据快照（重启项） |
 | `perf` | off | 性能日志：分段 p50/p95/p99 |
@@ -43,7 +44,7 @@
 
 ## 架构
 
-主运行时 `Scripts/main.lua`（4,839 行）+ 8 个边界模块，决策与执行分离：策略产出防守意图 → `ad_policy` 统一裁决 → `ad_input` 受控入口注入按键，按键/标签/解除都走同一道门。
+主运行时 `Scripts/main.lua`（4,946 行）+ 9 个边界模块，决策与执行分离：策略产出防守意图 → `ad_policy` 统一裁决 → `ad_input` 受控入口注入按键，按键/标签/解除都走同一道门。
 
 | 模块 | 职责 |
 |---|---|
@@ -54,6 +55,7 @@
 | `ad_async` | 事件环（512、丢新不丢旧）+ 每 tick 预算的预热任务 |
 | `ad_json` | 严格扁平 JSON（菜单配置用） |
 | `menu_config` | 菜单字段映射、跨字段不变量、回读校验式落盘 |
+| `ad_menu_bridge` | 菜单保存名折叠的兼容垫片（镜像文件名，不重复实现写盘） |
 | `toast` | 屏幕提示 |
 
 数据层：`data/ad_data.lua` 是冻结的招式快照（build 26367565），提供命中时段、无敌窗、真实射程、爆风半径、抓投标记等；读取走名称归一化，未命中时保持原行为。
@@ -118,7 +120,7 @@ PBZ Auto Defense is an automatic defense mod for **Phantom Blade Zero**. Built w
 - **Automatic dodge:** Evaluates red- and black-flash attacks against move timelines and dodge invulnerability windows. It also accounts for dodge spacing, action locks, and failed inputs.
 - **Grab response:** Uses a separate lead-time setting so ordinary attacks do not inherit grab timing.
 - **Defense hand-off:** Can detect the configuration and enabled state of PBZPerfectDefense and yield guard-related control when appropriate. This is cooperative configuration-based behavior, not a cross-mod or cross-process mutex.
-- **Native mod-menu settings:** Integrates with the in-game mod menu. There are 41 configuration fields, 38 of which are editable in the menu; some settings require a restart.
+- **Native mod-menu settings:** Integrates with the in-game mod menu. There are 41 configuration fields, 39 of which are editable in the menu; some settings require a restart.
 - **Diagnostics:** Optional defense decision ledger, event log, performance percentile logging, and a unified error channel.
 
 The mod does not guarantee a successful defense against every attack. Timing data is learned during play and may be incomplete on a fresh installation.
@@ -145,13 +147,14 @@ Recommended: download the latest package from the [GitHub Releases page](https:/
 
 | Setting | Default | Description |
 |---|---|---|
-| `perfect` / `parry` | on | Perfect-defense handling / automatic parry |
+| `perfect` / `parry` | off / on | Perfect-defense handling / automatic parry |
 | `parry_lead` | auto | Automatic or manual parry lead mode |
 | `dodge` | red | Dodge mode: `off`, `red`, or `all` (`all` includes black-flash attacks) |
-| `dodge_lead_ms` | 120 | Dodge lead time in milliseconds |
-| `dodge_gap_ms` | 220 | Minimum interval between dodges |
-| `grab_lead_ms` | 350 | Grab-response lead time |
-| `min_gap_ms` | 90 | Minimum interval between parries |
+| `dodge_lead_ms` | 80 | Dodge lead time in milliseconds |
+| `dodge_gap_ms` | 120 | Minimum interval between dodges |
+| `dodge_iframe_ms` | 260 | Dodge invulnerability coverage |
+| `grab_lead_ms` | 240 | Grab-response lead time |
+| `min_gap_ms` | 120 | Minimum interval between parries |
 | `pbzpd` | auto | PBZPerfectDefense hand-off: `auto`, `yield`, or `off` (restart required) |
 | `data` | on | Load the bundled move-data snapshot (restart required) |
 | `perf` | off | Write performance measurements |

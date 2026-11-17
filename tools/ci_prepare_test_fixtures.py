@@ -16,6 +16,15 @@ LEGACY = ROOT / "auto_defense.txt"
 
 
 def main() -> int:
+    if not CONFIG.exists() and LEGACY.exists() and LEGACY.stat().st_size > 0:
+        # Writing a default config next to an existing legacy TXT would shadow the
+        # player's tuning: the mod imports the TXT only while the JSON is missing
+        # (menu_config.py migration), so the old values would never be read again.
+        raise SystemExit(
+            "auto_defense.txt exists without pbz-auto-defense.config.json.\n"
+            "Refusing to create a default config here: it would shadow the legacy TXT.\n"
+            "Move the TXT aside, or run this script in a clean checkout."
+        )
     if not CONFIG.exists():
         descriptor = json.loads(DESCRIPTOR.read_text(encoding="utf-8"))
         settings = descriptor.get("settings")
