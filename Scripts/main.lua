@@ -4689,9 +4689,26 @@ end
 tl.start = function()
     tl.loopId, tl.ticks, tl.tickAt = tl.loopId + 1, 0, os.clock()
     local id = tl.loopId
-    -- an error in a tick is logged (once per message) and the loop goes on: an
-    -- error thrown out of the loop function could end the loop for good
-    LoopInGameThreadWithDelay(10, function()
+    -- The UE4SS delayed-action API returns an owned handle. Cancel the previous
+    -- watchdog loop before replacing it; otherwise a restart leaves a stale timer
+    -- waking up forever even though tl.main rejects its old generation id.
+    if tl.loopHandle ~= nil then
+        local previous = tl.loopHandle
+        tl.loopHandle = nil
+        if type(CancelDelayedAction) == "function" then
+            local ok, cancelled = pcall(CancelDelayedAction, previous)
+            if (not ok or cancelled == false) and not tl.loopCancelWarned then
+                tl.loopCancelWarned = true
+                log("main loop: could not cancel previous scheduler handle %s", tostring(previous))
+            end
+        elseif not tl.loopCancelWarned then
+            tl.loopCancelWarned = true
+            log("main loop: CancelDelayedAction unavailable; stale callback is generation-guarded")
+        end
+    end
+    -- An error in a tick is logged (once per message) and the loop goes on: an
+    -- error thrown out of the callback could end the loop for good.
+    local function tick()
         local t0 = settings.perf and os.clock()
         local ok, r = pcall(tl.main, id)
         if t0 then tl.perfTick(t0, os.clock()) end
@@ -4701,7 +4718,40 @@ tl.start = function()
             log("main loop error: %s", tl.mainErr)
         end
         return false
-    end)
+    end
+
+    -- Defense decisions sample frame-owned combat state, so prefer the UE4SS
+    -- EngineTick scheduler: one callback per rendered/game frame, no 10 ms timer
+    -- wakeups between frames. Older UE4SS builds retain the timer fallback.
+    if EngineTickAvailable and type(LoopInGameThreadAfterFrames) == "function" then
+        local ok, handle = pcall(LoopInGameThreadAfterFrames, 1, tick)
+        if ok and handle ~= nil then
+            tl.loopHandle, tl.loopSchedule = handle, "frame"
+            if tl.loopScheduleLogged ~= "frame" then
+                log("main loop scheduler: EngineTick, every 1 frame")
+                tl.loopScheduleLogged = "frame"
+            end
+            return
+        end
+        log("main loop scheduler: frame timer unavailable (%s), falling back to 10 ms",
+            tostring(ok and handle or handle))
+    end
+
+    if type(LoopInGameThreadWithDelay) == "function" then
+        local ok, handle = pcall(LoopInGameThreadWithDelay, 10, tick)
+        if ok and handle ~= nil then
+            tl.loopHandle, tl.loopSchedule = handle, "timer"
+            if tl.loopScheduleLogged ~= "timer" then
+                log("main loop scheduler: 10 ms compatibility timer")
+                tl.loopScheduleLogged = "timer"
+            end
+            return
+        end
+        log("main loop scheduler: timer unavailable (%s)", tostring(handle))
+        return
+    end
+    tl.loopSchedule = "failed"
+    log("main loop scheduler failed: no supported UE4SS delayed-action API")
 end
 tl.check = function()
     local quiet = os.clock() - tl.tickAt
