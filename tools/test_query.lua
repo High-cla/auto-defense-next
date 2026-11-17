@@ -36,4 +36,4 @@ assert(Q.tagLibrary() == found, "successful object is cached")
 assert(scans == 3, "cached success avoids further global scans")
 
 os.clock, StaticFindObject, ForEachUObject = oldClock, oldFind, oldEach
-print("QUERY PASS 9 assertions")
+print("QUERY PASS 12 assertions")
