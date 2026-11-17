@@ -11,7 +11,24 @@ FindAllOf = function() return {} end
 ForEachUObject = function() end
 RegisterKeyBind = function() end
 ExecuteInGameThread = function(fn) fn() end
-LoopInGameThreadWithDelay = function(_, fn) _G.__LOOP = fn end
+local nextActionHandle = 100
+LoopInGameThreadWithDelay = function(delay, fn)
+    nextActionHandle = nextActionHandle + 1
+    _G.__LOOP, _G.__LOOP_MODE, _G.__LOOP_DELAY_MS = fn, "timer", delay
+    _G.__LOOP_HANDLE = nextActionHandle
+    return nextActionHandle
+end
+EngineTickAvailable = true
+LoopInGameThreadAfterFrames = function(frames, fn)
+    nextActionHandle = nextActionHandle + 1
+    _G.__LOOP, _G.__LOOP_MODE, _G.__LOOP_FRAMES = fn, "frame", frames
+    _G.__LOOP_HANDLE = nextActionHandle
+    return nextActionHandle
+end
+CancelDelayedAction = function(handle)
+    _G.__CANCELLED_HANDLE = handle
+    return true
+end
 package.preload.UEHelpers = function() return { GetPlayerController = function() return nil end } end
 package.preload.toast = function() return { new = function() return { show = function() return true end } end } end
 local gc = collectgarbage
@@ -30,7 +47,24 @@ write("initial-menu.config.json", initial)
 -- the shipped config is the shipped defaults (1.6.4); keep in sync with the descriptor
 eq(S.perfect, false); eq(S.parryReach, 0.5); eq(S.guardReleaseAfter, 0.5); eq(S.guardReleaseCombatEnd, 0.5)
 eq(S.keys.parry, "F9")
+eq(_G.__LOOP_MODE, "frame", "frame scheduler preferred when EngineTick is available")
+eq(_G.__LOOP_FRAMES, 1, "defense loop runs once per engine frame")
 assert(_G.__LOOP() == false, "tick without a player is safe")
+local firstHandle = _G.__LOOP_HANDLE
+T.start()
+eq(_G.__CANCELLED_HANDLE, firstHandle, "watchdog restart cancels the previous loop")
+eq(_G.__LOOP_MODE, "frame"); eq(_G.__LOOP_FRAMES, 1)
+local secondHandle = _G.__LOOP_HANDLE
+EngineTickAvailable = false
+T.start()
+eq(_G.__CANCELLED_HANDLE, secondHandle, "fallback restart also cancels the previous loop")
+eq(_G.__LOOP_MODE, "timer", "10 ms timer is the compatibility fallback")
+eq(_G.__LOOP_DELAY_MS, 10)
+local fallbackHandle = _G.__LOOP_HANDLE
+EngineTickAvailable = true
+T.start()
+eq(_G.__CANCELLED_HANDLE, fallbackHandle)
+eq(_G.__LOOP_MODE, "frame")
 local fake = { GetAddress = function() return 77 end, IsValid = function() return true end,
     ReceiveFrames = { ForEach = function(_, fn)
         fn({ get = function() return 7 end }, { get = function() return { HitGameTime = 100.5, IsDodge = false } end })
