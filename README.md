@@ -212,6 +212,7 @@ This runs the policy, async, timeline, query, menu-config, menu-bridge, and inte
 - [docs/UE4SS-LUA-API-REFERENCE.md](docs/UE4SS-LUA-API-REFERENCE.md): UObject queries, game-thread scheduling, hooks, containers, input, lifecycle, and Lua performance practices.
 - [docs/PBZ-GAME-API-REFERENCE.md](docs/PBZ-GAME-API-REFERENCE.md): PBZ DeflectComponent, AbilityInputComponent, Enhanced Input, SDK coverage, and verification levels.
 - [docs/PBZ-USMAP-TOOLCHAIN.md](docs/PBZ-USMAP-TOOLCHAIN.md): live/offline type capture, USMAP format, merging, quality checks, and build workflow.
+- [docs/PBZ-SDK-RESOURCES.md](docs/PBZ-SDK-RESOURCES.md): PBZ Game API SDK download/setup, UE4SS C++ SDK Generator, and the distinction from USMAP mappings.
 - [docs/API-OPTIMIZATION-ROADMAP.md](docs/API-OPTIMIZATION-ROADMAP.md): implemented changes, API candidates, risk levels, A/B measurement, and in-game validation.
 - [docs/PBZMODSMENU-API-REFERENCE.md](docs/PBZMODSMENU-API-REFERENCE.md): PBZModsMenu menu API — descriptor fields, event and bridge write contract, and the pitfalls, checked against the local main.js.
 - [MODULES.md](MODULES.md): module boundaries and the public runtime surface.
