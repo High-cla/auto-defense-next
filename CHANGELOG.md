@@ -99,9 +99,9 @@ Versions are the `tl.VERSION` value in `Scripts/main.lua`; the release tag is `v
   （`tl.inputStateErr` 记原因，同一局不再重试）；`ad_inputstate` 连续 3 次「API 不可用」类故障（无 input component、
   无 `SGameInput`、`IsHolding` 抛错、返回非布尔）后自动回退到键判，也可 `o:disable(why)` 手动回退；「还没有角色」
   「还没有 input action」算暂时状态不计数，一次成功答案即重置连续计数。回退后 `tl.holdAsk` 返回键判且**不再读游戏**。
-- 计数：`ad_inputstate.lua` 90 → 110 行；`tl.api` 26 → 27（`installInputState`）；门禁 645 断言
-  （POLICY 35 / ASYNC 46 / TIMELINE 18 / QUERY 42 / MENU 69 / BRIDGE 115 / COMPAT 29 / TOAST 52 / API_CONTRACT 41 /
-  INPUTSTATE 64 / INTEGRATION 134），selene 0 errors，`check_docs` 一致。
+- 计数：`ad_inputstate.lua` 90 → 110 行；`tl.api` 26 → 27（`installInputState`）。门禁全绿、selene 0 errors、
+  `check_docs` 一致；**各套断言数不写进文档**，以 `tools/run_all.sh` 输出为唯一来源（`tools/check_docs.py` 头注释：
+  手抄的数字会漂，能推导的才写下来）。
 - 测试证据：`ad_inputstate` 的回退语义先在 `tools/test_inputstate.lua` 上 RED（第 3 次故障后 `dead` 仍为 nil），再实现；
   集成侧两条断言用**变异验证**证明有牙：去掉 `holdAsk` 的 `IS.dead` 判断 → `a reverted adapter leaves the key answer alone` 失败，
   把 `installInputState` 改回每次都重建 → `a second install keeps the live adapter` 失败。
