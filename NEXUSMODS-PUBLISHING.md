@@ -2,7 +2,7 @@
 
 本仓库将首次文件创建与后续版本更新分开处理：
 
-- **首次创建**：手动运行 Nexus Mods publish workflow。workflow 先运行项目测试、构建 ZIP，再通过 Nexus Mods v3 单段上传 API 上传文件，并创建第一条 Main file 记录；若该 file entry 已存在但没有版本，则为它创建首个版本。
+- **首次创建**：手动运行 Nexus Mods publish workflow。workflow 先运行项目测试，再下载现有 GitHub Release `v1.6.4` 的 ZIP，并校验已发布的文件大小和 SHA-256；随后通过 Nexus Mods v3 单段上传 API 上传该 ZIP，并创建第一条 Main file 记录；若该 file entry 已存在但没有版本，则为它创建首个版本。
 - **后续更新**：每次发布 GitHub Release，workflow 使用官方 Nexus-Mods/upload-action 为既有 file entry 追加新版本。
 
 合并 PR 不会自动上传。首次上传需要维护者手动运行 workflow，并把确认项设置为 true。
@@ -51,15 +51,15 @@ PR 合并到 main 后：
 workflow 将会：
 
 1. 安装 LuaJIT 并运行 bash tools/run_all.sh。
-2. 调用 bash tools/package.sh，从 Scripts/main.lua 的 tl.VERSION 读取包版本。
-3. 验证 ZIP 完整性以及必要运行文件，拒绝包含日志、玩家配置或开发文件的 ZIP。
+2. 下载现有 GitHub Release `v1.6.4` 的 `pbz-auto-defense-v1.6.4.zip`，校验大小为 `285,737` bytes、SHA-256 为 `eb4745588ca311dc26e84680a2a3b1aa2ae338d0e73cd09a2b992296d221a705`。
+3. 运行首次上传脚本的 ZIP 白名单和完整性检查。
 4. 调用 GET /games/phantombladezero/mods/45586782881016 验证游戏 mod 页面。
 5. 查询该 mod 的 file list，并核对候选 file ID 8404851。
 6. 如果 PBZ Auto Defense 文件记录已存在但没有版本，为该记录创建首个版本；如果不存在，创建新的 Main file。
 7. 使用单段 POST /uploads 上传 ZIP，finalise 后轮询至 available，再创建 file/version 记录。
 8. 在 workflow Summary 输出最终 file ID、file version ID（API 有返回时）、版本和 ZIP SHA-256。
 
-当前 v1.6.4 ZIP 约 279 KiB，小于单段上传的 100 MiB 限制。脚本会在创建上传会话时发送 MD5 十六进制值，并在预签名 PUT 时发送同一摘要的 Base64 Content-MD5；同时发送签名要求的 Content-Disposition。这样也兼容官方 schema 公告的 2026-12-01 单段上传 md5 必填变更。
+当前已发布 v1.6.4 ZIP 为 285,737 bytes（约 279 KiB），小于单段上传的 100 MiB 限制。首次上传使用 GitHub Release 中的原始 ZIP，而不是从当前 main 重打包：v1.6.4 tag 之后 main 上的源码有改动，但版本字符串仍为 1.6.4；直接打包 main 会造成同版本不同内容。脚本会在创建上传会话时发送 MD5 十六进制值，并在预签名 PUT 时发送同一摘要的 Base64 Content-MD5；同时发送签名要求的 Content-Disposition。这样也兼容官方 schema 公告的 2026-12-01 单段上传 md5 必填变更。
 
 脚本在上传前检查现有 file list。如果 PBZ Auto Defense 已有版本，它只报告 file ID 并停止，不重复上传。如果候选 file ID 属于其他文件，则 fail closed，不会误更新其他模组文件。
 

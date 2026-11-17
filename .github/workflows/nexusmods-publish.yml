@@ -70,18 +70,27 @@ jobs:
       - name: Run project offline test gate
         run: bash tools/run_all.sh
 
-      - name: Build release ZIP
+      - name: Download the published v1.6.4 release archive
         id: package
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          bash tools/package.sh
-          archive_count=$(find dist -maxdepth 1 -type f -name 'pbz-auto-defense-v*.zip' | wc -l)
-          if [ "$archive_count" -ne 1 ]; then
-            echo "Expected exactly one PBZ Auto Defense release ZIP."
+          mkdir -p dist
+          gh release download v1.6.4 --repo "$GITHUB_REPOSITORY" \
+            --pattern "pbz-auto-defense-v1.6.4.zip" --dir dist
+          archive="dist/pbz-auto-defense-v1.6.4.zip"
+          test -s "$archive"
+          actual_size=$(stat -c '%s' "$archive")
+          actual_sha=$(sha256sum "$archive" | awk '{print $1}')
+          expected_size="285737"
+          expected_sha="eb4745588ca311dc26e84680a2a3b1aa2ae338d0e73cd09a2b992296d221a705"
+          if [[ "$actual_size" != "$expected_size" || "$actual_sha" != "$expected_sha" ]]; then
+            echo "Downloaded v1.6.4 archive does not match the published release asset."
+            echo "Actual size: $actual_size; SHA-256: $actual_sha"
             exit 1
           fi
-          archive=$(find dist -maxdepth 1 -type f -name 'pbz-auto-defense-v*.zip' -print)
           unzip -t "$archive"
           echo "filename=$archive" >> "$GITHUB_OUTPUT"
 
