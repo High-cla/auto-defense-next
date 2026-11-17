@@ -10,6 +10,7 @@
 | [UE4SS Lua API 实战参考](docs/UE4SS-LUA-API-REFERENCE.md) | 模组生命周期、UObject 查询与缓存、RemoteUnrealParam、FName、Delayed Actions、EngineTick、RegisterHook、TArray/TMap、输入与性能反模式 | 开发和维护当前 Lua 模组 |
 | [PBZ 游戏反射 API 参考](docs/PBZ-GAME-API-REFERENCE.md) | DeflectComponent、Receive/Send frames、DeflectResultData、AbilityInputComponent、Enhanced Input、PBZModLoader SDK 验证等级、Lua/JS 对照 | 查找游戏类和战斗/输入 API |
 | [PBZ USMAP 工具链指南](docs/PBZ-USMAP-TOOLCHAIN.md) | Live/Offline dump、PBZ 特殊反射布局、USMAP v4/CEXT/PPTH/EATR、合并优先级、质量检查、build.ps1 和排错 | 游戏更新、反射采集和 schema 核验 |
+| [PBZ SDK 与反射资源索引](docs/PBZ-SDK-RESOURCES.md) | 区分 PBZ USMAP、PBZModLoader TypeScript Game API SDK、UE4SS C++ SDK Generator；包含 developer ZIP 下载和安装方法 | 为 Lua/TS/C++ MOD 选择正确的 API 类型资源 |
 | [API 优化路线图](docs/API-OPTIMIZATION-ROADMAP.md) | 当前代码 API 映射、已完成优化、候选 API、风险等级、性能 A/B 方法和实机验收标准 | 决定下一项性能/稳定性改进 |
 
 ## 推荐阅读路径
