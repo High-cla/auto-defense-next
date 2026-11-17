@@ -72,18 +72,26 @@ end
 
 function M.tag(s) return { TagName = FName(s) } end
 
--- PBZAbilityBlueprintLibrary's module is not known for sure: try the likely ones,
--- then search the object table once and log the real path.
-local tagLib
+-- PBZAbilityBlueprintLibrary's module is not known for sure: try the likely
+-- StaticFindObject paths, then use one global object walk as a fallback. UE4SS
+-- documents ForEachUObject/FindAllOf as full object-array scans; a failed lookup
+-- must not repeat that scan from a hot decision path.
+local tagLib, tagLibRetryAt = nil, 0
+local TAG_LIB_RETRY_SEC = 5
 function M.tagLibrary()
     if M.valid(tagLib) then return tagLib end
+    local now = os.clock()
+    if now < tagLibRetryAt then return nil end
+    tagLibRetryAt = now + TAG_LIB_RETRY_SEC
     for _, m in ipairs({ "ProjectPBZ", "PBZAbility", "PBZAbilitySystem", "PBZCombat", "PBZGameplay" }) do
         tagLib = M.obj("/Script/" .. m .. ".Default__PBZAbilityBlueprintLibrary")
         if tagLib then return tagLib end
     end
-    ForEachUObject(function(o)
-        if not tagLib and M.name(o:GetFName()) == "Default__PBZAbilityBlueprintLibrary" then tagLib = o end
-    end)
+    if type(ForEachUObject) == "function" then
+        ForEachUObject(function(o)
+            if not tagLib and M.name(o:GetFName()) == "Default__PBZAbilityBlueprintLibrary" then tagLib = o end
+        end)
+    end
     if M.valid(tagLib) then logFn("PBZAbilityBlueprintLibrary found at %s", tagLib:GetFullName()) end
     return tagLib
 end
