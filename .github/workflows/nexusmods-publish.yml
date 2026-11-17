@@ -6,6 +6,8 @@ on:
       - '.github/workflows/nexusmods-publish.yml'
       - 'tools/nexusmods_bootstrap.py'
       - 'tools/nexusmods_resolve_mod.py'
+      - 'tools/ci_prepare_test_fixtures.py'
+      - 'tools/run_integration.sh'
       - 'tools/package.py'
       - 'tools/package.sh'
       - 'Scripts/**'
@@ -62,6 +64,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y luajit
 
+      - name: Prepare ignored default config fixtures
+        run: python3 tools/ci_prepare_test_fixtures.py
       - name: Run project offline test gate
         run: bash tools/run_all.sh
 
@@ -127,6 +131,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y luajit
 
+      - name: Prepare ignored default config fixtures
+        run: python3 tools/ci_prepare_test_fixtures.py
       - name: Run project offline test gate
         run: bash tools/run_all.sh
 
@@ -236,9 +242,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y luajit
       - name: Compile packaging and bootstrap scripts
-        run: python -m py_compile tools/package.py tools/nexusmods_bootstrap.py tools/nexusmods_resolve_mod.py
+        run: python -m py_compile tools/package.py tools/nexusmods_bootstrap.py tools/nexusmods_resolve_mod.py tools/ci_prepare_test_fixtures.py
       - name: Validate menu descriptor JSON
         run: python -m json.tool pbz-auto-defense.modsmenu.json > /dev/null
+      - name: Prepare ignored default config fixtures
+        run: python3 tools/ci_prepare_test_fixtures.py
       - name: Run project offline test gate
         run: bash tools/run_all.sh
       - name: Build and inspect release ZIP

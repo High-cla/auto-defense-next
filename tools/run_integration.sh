@@ -10,5 +10,9 @@ cp -r "$here/Scripts" "$tmp/"
 cp "$here/pbz-auto-defense.config.json" "$here/pbz-auto-defense.modsmenu.json" "$here/auto_defense.txt" "$tmp/"
 : > "$tmp/.ad-menu-test-only"
 cd "$tmp"
-AD_MENU_TEST=1 luajit "$(cygpath -w "$here/tools/test_integration.lua")"
+test_script="$here/tools/test_integration.lua"
+if command -v cygpath >/dev/null 2>&1; then
+    test_script="$(cygpath -w "$test_script")"
+fi
+AD_MENU_TEST=1 luajit "$test_script"
 echo "temp copy: $tmp"
