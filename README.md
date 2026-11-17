@@ -104,8 +104,6 @@ git commit                   # pre-commit 自动跑同一道门禁
 - [CONFIGURATION-REFERENCE.md](docs/CONFIGURATION-REFERENCE.md)：41 个配置项的中英说明、类型、默认值、范围、持久化和 TXT→JSON 迁移
 - [ASYNC-OBSERVABILITY.md](docs/ASYNC-OBSERVABILITY.md)：事件环契约、事件表、sink 格式、perf 与错误通道
 - [MENU-INTEGRATION.md](docs/MENU-INTEGRATION.md)：菜单字段、重启项、只读项、集成链
-- [AUDIT-2026-11-16.md](docs/AUDIT-2026-11-16.md)：P0–P2 审计项的处置与延后理由
-- [AUDIT-2026-11-17.md](docs/AUDIT-2026-11-17.md)：对照 API 文档的代码质量审计（P0×4/P1×9/P2×8）与本轮处置
 - [UPSTREAM-API-GUIDE.md](docs/UPSTREAM-API-GUIDE.md)：UE4SS Lua API、PBZModLoader 反射 SDK、PBZ USMAP 工具链及本模组的 API 优化记录
 - [docs/UE4SS-LUA-API-REFERENCE.md](docs/UE4SS-LUA-API-REFERENCE.md)：UE4SS Lua 对象、线程、Hook、定时器、容器和性能 API 实战参考
 - [docs/PBZ-GAME-API-REFERENCE.md](docs/PBZ-GAME-API-REFERENCE.md)：PBZ DeflectComponent、AbilityInputComponent、Enhanced Input 与 SDK 验证等级
@@ -117,7 +115,8 @@ git commit                   # pre-commit 自动跑同一道门禁
 
 ## Nexus Mods 发布
 
-首次上传与 GitHub Actions 自动发布配置见 [NEXUSMODS-PUBLISHING.md](docs/NEXUSMODS-PUBLISHING.md)。
+首次上传与后续版本更新都由 `.github/workflows/nexusmods-publish.yml` 完成：先跑项目门禁，再校验已发布
+文件的大小与 SHA-256，并拒绝重复发布同一版本（fail-closed，规则写在 workflow 的注释里）。
 
 ## License
 

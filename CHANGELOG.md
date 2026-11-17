@@ -118,7 +118,7 @@ Versions are the `tl.VERSION` value in `Scripts/main.lua`; the release tag is `v
 
 ## 1.6.3 — 2026-11-16
 
-审计驱动的稳定性/性能批次（见 [AUDIT-2026-11-16.md](docs/AUDIT-2026-11-16.md)），行为对玩家保持不变。
+审计驱动的稳定性/性能批次，行为对玩家保持不变。
 
 - 度量：`perf=on` 时逐阶段环形采样，输出 tick 与每个 stage 的 p50/p95/p99；hitches 改为计数。
 - 错误：统一 `tl.err` 通道（同源前三次记日志、首次带 traceback，并进事件日志），三处 hook 失败不再静默。

@@ -1,8 +1,8 @@
 # Module layout (1.6.4)
 
 Decision and execution order is unchanged. What moved is **where each concern lives**
-and **which door every side effect goes through**. The audit that produced this release
-is in `AUDIT-2026-11-16.md`; behaviour changes are listed there, not here.
+and **which door every side effect goes through**. Behaviour changes are listed in the
+CHANGELOG, not here.
 
 | File | Lines | Owns |
 | --- | ---: | --- |
