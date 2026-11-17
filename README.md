@@ -40,7 +40,7 @@
 | `events` | on | 事件日志 `ad_events.txt` |
 | `ledger` | on | 决策账本 `auto_defense_ledger.txt` |
 
-完整字段与重启/只读限制见 [MENU-INTEGRATION.md](docs/MENU-INTEGRATION.md)。
+完整字段、类型/默认值/范围、双语说明、持久化与迁移规则见 [CONFIGURATION-REFERENCE.md](docs/CONFIGURATION-REFERENCE.md)；菜单协议与兼容边界见 [MENU-INTEGRATION.md](docs/MENU-INTEGRATION.md)。
 
 ## 架构
 
@@ -97,6 +97,10 @@ git commit                   # pre-commit 自动跑同一道门禁
 ## 文档
 
 - [MODULES.md](docs/MODULES.md)：模块表、意图→规则表、`tl.api` / `tl.prunable` 契约、未搬项
+- [ARCHITECTURE.md](docs/ARCHITECTURE.md)：系统边界、模块关系、启动顺序、每帧数据流和副作用门
+- [DEFLECT-STATE-MACHINE.md](docs/DEFLECT-STATE-MACHINE.md)：ReceiveFrame 候选、红招优先、闪避/弹反分支与 guard 生命周期
+- [RUNTIME-LIFECYCLE.md](docs/RUNTIME-LIFECYCLE.md)：游戏线程、主循环调度、Hook 重试/注销缺口、暂停恢复与资源管理
+- [CONFIGURATION-REFERENCE.md](docs/CONFIGURATION-REFERENCE.md)：41 个配置项的中英说明、类型、默认值、范围、持久化和 TXT→JSON 迁移
 - [ASYNC-OBSERVABILITY.md](docs/ASYNC-OBSERVABILITY.md)：事件环契约、事件表、sink 格式、perf 与错误通道
 - [MENU-INTEGRATION.md](docs/MENU-INTEGRATION.md)：菜单字段、重启项、只读项、集成链
 - [AUDIT-2026-11-16.md](docs/AUDIT-2026-11-16.md)：P0–P2 审计项的处置与延后理由
@@ -216,6 +220,10 @@ This runs the policy, async, timeline, query, menu-config, menu-bridge, and inte
 - [docs/API-OPTIMIZATION-ROADMAP.md](docs/API-OPTIMIZATION-ROADMAP.md): implemented changes, API candidates, risk levels, A/B measurement, and in-game validation.
 - [docs/PBZMODSMENU-API-REFERENCE.md](docs/PBZMODSMENU-API-REFERENCE.md): PBZModsMenu menu API — descriptor fields, event and bridge write contract, and the pitfalls, checked against the local main.js.
 - [MODULES.md](docs/MODULES.md): module boundaries and the public runtime surface.
+- [ARCHITECTURE.md](docs/ARCHITECTURE.md): system boundaries, module map, startup sequence, per-tick data flow, and side-effect gates.
+- [DEFLECT-STATE-MACHINE.md](docs/DEFLECT-STATE-MACHINE.md): ReceiveFrame candidates, dodge/parry priority, and guard-state handling.
+- [RUNTIME-LIFECYCLE.md](docs/RUNTIME-LIFECYCLE.md): game-thread scheduling, Hook lifecycle, pause/recovery, and teardown limitations.
+- [CONFIGURATION-REFERENCE.md](docs/CONFIGURATION-REFERENCE.md): bilingual setting catalog, types, defaults, ranges, persistence, and legacy migration.
 - [MENU-INTEGRATION.md](docs/MENU-INTEGRATION.md): native menu configuration and compatibility boundaries.
 
 ## License
