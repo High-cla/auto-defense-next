@@ -71,7 +71,7 @@
 ## 开发
 
 ```bash
-bash tools/run_all.sh        # POLICY/ASYNC/TIMELINE/MENU/INTEGRATION + selene
+bash tools/run_all.sh        # POLICY/ASYNC/TIMELINE/QUERY/MENU/BRIDGE/INTEGRATION + selene
 git commit                   # pre-commit 自动跑同一道门禁
 ```
 
