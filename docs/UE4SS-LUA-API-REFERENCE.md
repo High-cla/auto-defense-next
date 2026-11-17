@@ -49,6 +49,8 @@ local Policy = dofile(MOD_DIR .. "Scripts/ad_policy.lua")
 
 UE4SS 支持热重载 Lua MOD。重载前应确保旧的计时器、Hook、回调和持有的对象引用不会继续产生副作用；不要把“脚本文件被重新执行”误认为所有 UE 对象、输入状态和外部 Hook 自动清理完成。
 
+**SDK 提示：** UE4SS 另有 C++ SDK Generator，可在游戏内 GUI Console 的 Dumpers 标签点击 Generate SDK，生成供 C++ MOD 使用的头文件；它不是 Lua API，也不是 PBZModLoader TypeScript SDK。完整输出路径、CMake 接入和验证头文件见 [PBZ SDK 与反射资源索引](PBZ-SDK-RESOURCES.md)。
+
 ### 1.1 运行时 Lua 版本与离线门禁的差距
 
 游戏内的 UE4SS 运行 **Lua 5.4**，而本仓库的离线门禁跑 **LuaJIT（Lua 5.1）**。这不是学术差别：`collectgarbage("generational")`、`math.atan(y, x)` 这类 5.4 专有调用在 5.1 下会抛错，而离线测试覆盖不到。
