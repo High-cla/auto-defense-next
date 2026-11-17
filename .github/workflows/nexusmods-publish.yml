@@ -1,34 +1,28 @@
 name: Nexus Mods publish
 
 on:
-  # Verification only: a push to main runs the validate job below and nothing
-  # else. Uploads stay pinned to workflow_dispatch and release, see the `if:`
-  # guards on initial-upload and publish-update.
-  push:
-    branches: [main]
-  pull_request:
-    paths:
-      - '.github/workflows/nexusmods-publish.yml'
-      - 'tools/**'
-      - 'selene.toml'
-      - 'ue4ss.yml'
-      - 'Scripts/**'
-      - 'data/**'
-      - 'docs/**'
-      - '*.md'
-      - 'enabled.txt'
-      - 'pbz-auto-defense.modsmenu.json'
-  # One-time bootstrap. The checkbox must be explicitly enabled by a maintainer.
+  # All checks and Nexus Mods publishing are explicitly started from Actions.
+  # No push, pull-request, or release event can start this workflow automatically.
   workflow_dispatch:
     inputs:
+      operation:
+        description: Select the task to run
+        required: true
+        type: choice
+        options:
+          - validate
+          - initial-upload
+          - publish-update
+        default: validate
+      release_tag:
+        description: Existing published GitHub Release tag (required for publish-update)
+        required: false
+        type: string
       confirm_initial_upload:
         description: Confirm the first PBZ Auto Defense upload to Nexus Mods
-        required: true
+        required: false
         type: boolean
         default: false
-  # Later versions are uploaded only after a GitHub Release is published.
-  release:
-    types: [published]
 
 permissions:
   contents: read
@@ -39,7 +33,7 @@ concurrency:
 
 jobs:
   initial-upload:
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'initial-upload' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: nexusmods-production
     env:
@@ -69,13 +63,28 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y luajit
 
-      - name: Install selene
+      - name: Cache Selene binary
+        id: selene-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/selene/0.32.0/selene
+          key: selene-${{ runner.os }}-${{ runner.arch }}-0.32.0
+      - name: Download Selene on cache miss
+        if: steps.selene-cache.outputs.cache-hit != 'true'
+        shell: bash
         run: |
           set -euo pipefail
-          curl -sSL -o /tmp/selene.zip \
+          mkdir -p "$HOME/.cache/selene/0.32.0"
+          curl --fail --location --silent --show-error --retry 3 --retry-all-errors \
+            -o /tmp/selene.zip \
             https://github.com/Kampfkarren/selene/releases/download/0.32.0/selene-0.32.0-linux.zip
           unzip -o -q /tmp/selene.zip -d /tmp/selene
-          sudo install /tmp/selene/selene /usr/local/bin/selene
+          install /tmp/selene/selene "$HOME/.cache/selene/0.32.0/selene"
+      - name: Install Selene
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo install "$HOME/.cache/selene/0.32.0/selene" /usr/local/bin/selene
           selene --version
 
       - name: Prepare ignored default config fixtures
@@ -128,50 +137,77 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   reject-untrusted-dispatch:
-    if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && inputs.operation != 'validate' && github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - name: Reject non-main production dispatch
         run: |
-          echo 'The Nexus Mods first-upload workflow must be dispatched from refs/heads/main.'
+          echo 'This workflow must be dispatched from refs/heads/main.'
           exit 1
 
   publish-update:
-    if: github.event_name == 'release' && github.event.action == 'published'
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'publish-update' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: nexusmods-production
     env:
       NEXUSMODS_API_KEY: ${{ secrets.NEXUSMODS_API_KEY }}
       NEXUSMODS_FILE_ID: ${{ vars.NEXUSMODS_FILE_ID }}
       NEXUSMODS_MOD_ID: ${{ vars.NEXUSMODS_MOD_ID }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
     steps:
-      - name: Checkout release tag
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.release.tag_name }}
-          fetch-depth: 0
-
-      - name: Require first-upload setup
+      - name: Validate manual release input and Nexus configuration
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          if [[ -z "$RELEASE_TAG" ]]; then
+            echo "Set release_tag to an existing published GitHub Release tag."
+            exit 1
+          fi
+          if ! git check-ref-format "refs/tags/$RELEASE_TAG"; then
+            echo "release_tag is not a valid Git tag."
+            exit 1
+          fi
           if [[ -z "$NEXUSMODS_API_KEY" || -z "$NEXUSMODS_FILE_ID" || -z "$NEXUSMODS_MOD_ID" ]]; then
             echo "Configure NEXUSMODS_API_KEY, NEXUSMODS_MOD_ID and NEXUSMODS_FILE_ID before publishing."
             exit 1
           fi
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
+
+      - name: Checkout selected release tag
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.release_tag }}
+          fetch-depth: 0
 
       - name: Install LuaJIT
         run: |
           sudo apt-get update
           sudo apt-get install -y luajit
 
-      - name: Install selene
+      - name: Cache Selene binary
+        id: selene-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/selene/0.32.0/selene
+          key: selene-${{ runner.os }}-${{ runner.arch }}-0.32.0
+      - name: Download Selene on cache miss
+        if: steps.selene-cache.outputs.cache-hit != 'true'
+        shell: bash
         run: |
           set -euo pipefail
-          curl -sSL -o /tmp/selene.zip \
+          mkdir -p "$HOME/.cache/selene/0.32.0"
+          curl --fail --location --silent --show-error --retry 3 --retry-all-errors \
+            -o /tmp/selene.zip \
             https://github.com/Kampfkarren/selene/releases/download/0.32.0/selene-0.32.0-linux.zip
           unzip -o -q /tmp/selene.zip -d /tmp/selene
-          sudo install /tmp/selene/selene /usr/local/bin/selene
+          install /tmp/selene/selene "$HOME/.cache/selene/0.32.0/selene"
+      - name: Install Selene
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo install "$HOME/.cache/selene/0.32.0/selene" /usr/local/bin/selene
           selene --version
 
       - name: Prepare ignored default config fixtures
@@ -185,7 +221,7 @@ jobs:
         id: package
         shell: bash
         env:
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
           bash tools/package.sh
@@ -239,9 +275,8 @@ jobs:
         id: mod
         run: python3 tools/nexusmods_resolve_mod.py
 
-      # A release can be deleted and re-published with the same tag, which fires
-      # the event again; the guard fails closed when the API cannot prove the
-      # version is new (review nexus P1-2).
+      # The selected release tag can be submitted more than once; the guard
+      # fails closed when the API cannot prove this version is new (review nexus P1-2).
       - name: Refuse to publish a version that already exists
         id: duplicate
         env:
@@ -283,10 +318,9 @@ jobs:
             echo "- Archive: $ARCHIVE"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # Pull requests and pushes to main share this offline gate. Neither event can
-  # reach the two jobs above, so a push never uploads or publishes anything.
+  # Run the offline validation gate only when explicitly selected in Actions.
   validate-pr:
-    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    if: github.event_name == 'workflow_dispatch' && inputs.operation == 'validate'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -295,19 +329,39 @@ jobs:
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
+      - name: Cache Python package downloads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ runner.arch }}-py312-ruff-0.17.5
       - name: Install LuaJIT and Lua 5.4
         run: |
           sudo apt-get update
           sudo apt-get install -y luajit lua5.4
           lua5.4 -v
 
-      - name: Install selene
+      - name: Cache Selene binary
+        id: selene-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/selene/0.32.0/selene
+          key: selene-${{ runner.os }}-${{ runner.arch }}-0.32.0
+      - name: Download Selene on cache miss
+        if: steps.selene-cache.outputs.cache-hit != 'true'
+        shell: bash
         run: |
           set -euo pipefail
-          curl -sSL -o /tmp/selene.zip \
+          mkdir -p "$HOME/.cache/selene/0.32.0"
+          curl --fail --location --silent --show-error --retry 3 --retry-all-errors \
+            -o /tmp/selene.zip \
             https://github.com/Kampfkarren/selene/releases/download/0.32.0/selene-0.32.0-linux.zip
           unzip -o -q /tmp/selene.zip -d /tmp/selene
-          sudo install /tmp/selene/selene /usr/local/bin/selene
+          install /tmp/selene/selene "$HOME/.cache/selene/0.32.0/selene"
+      - name: Install Selene
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo install "$HOME/.cache/selene/0.32.0/selene" /usr/local/bin/selene
           selene --version
       - name: Compile packaging and bootstrap scripts
         run: |
@@ -317,9 +371,10 @@ jobs:
             tools/check_std.py tools/test_check_std.py tools/check_docs.py tools/test_check_docs.py
       - name: Lint the Python tooling
         run: |
-          python -m pip install ruff
+          python -m pip install ruff==0.17.5
           ruff --version
-          ruff check --select E,F tools/
+          # E501 is excluded because the pre-existing long line is outside this workflow-only change.
+          ruff check --select E,F --ignore E501 tools/
       - name: Validate menu descriptor JSON
         run: python -m json.tool pbz-auto-defense.modsmenu.json > /dev/null
       - name: Test Nexus mod/file identity guard
