@@ -17,6 +17,12 @@ Versions are the `tl.VERSION` value in `Scripts/main.lua`; the release tag is `v
 - 新增四份 P0 工程文档：ARCHITECTURE（模块/启动/数据流）、DEFLECT-STATE-MACHINE（命中候选、闪避/弹反优先级与 guard 状态）、RUNTIME-LIFECYCLE（调度、Hook、暂停恢复及当前 Hook 注销缺口）和 CONFIGURATION-REFERENCE（41 项中英配置目录、类型/默认值/范围/持久化及 TXT→JSON 首次迁移）。README、UPSTREAM-API-GUIDE 与 MENU-INTEGRATION 已加入索引或同步字段数（41 项、39 项可编辑、2 项只读）。
 - 文档整理：除 `README.md`、`CHANGELOG.md` 与 `openmods.md` 外，所有 Markdown 移入 `docs/`，README/CHANGELOG/文档之间的相对链接全部改写；顺带修正了一批原本指向 UE4SS 根目录（`<Mods/pbz-auto-defense/…>`）的断链，并把指向 `.gitignore` 文件中（配置 JSON、旧 TXT、`backup/`）的链接改成代码片段。`openmods.md` 必须留在根目录：openmods 的 `$schema` 明确写「Put this file at the root of your mod repository, next to openmods.md」，商店页正文靠这条相邻约定被发现。`tools/check_docs.py` 新增相对链接校验与 openmods 配对校验：断链或 `openmods.md` 被搬走都直接失败。
 
+### SDK 覆盖审计（PBZModLoader game-api 0.3.3）
+
+- 以 SDK 的 TypeScript 声明为索引，逐条核对了模组调用的每个游戏函数、组件与属性：6 个核心调用（`GetNearestValidReceivedFrame`、`ReceiveFrames`、`SendDeflectFrame` 的 11 个参数、`TryActivateExternalActionAbilityInterruptLowerByTag`、`InjectInputVectorForAction`、`AddLooseGameplayTag/RemoveLooseGameplayTag`）签名逐位吻合，**没有一处需要改名或改参数顺序**；SDK 里查不到的调用全部属于 UE4SS Lua 运行时，不是缺口。
+- 结论与待办写进 `docs/SDK-API-COVERAGE.md`（含验证等级的真实含义、两套运行时的差别、新增候选、明确不要碰的 API、待实机决定的 3 件事）。
+- 新增 `tools/test_api_contract.lua`（34 断言，已进门禁）：钉住 `onSendFrame` 的 11 参顺序、`tl.BULLET_TYPES` 与 `EDeflectBulletType` 的枚举对应、`GetNearestValidReceivedFrame` 的 5 参形状——这三处错了游戏不会报错，只会让决策悄悄算错。
+
 ### Hook 注销与统一 teardown（审计 P1-4）
 
 - 每个 `RegisterHook` 站点改为接收并保存**两个** id（UE4SS 返回 `preId, postId`），连同 UFunction 路径一起存入 `tl.hookIds`（`RT.rememberHook(key, path, pre, post)`）。此前只取首个返回值，post 半边永远留在引擎里——这是审计 P1-4 的真正缺陷，涉及 stance frame / bullet / result / activation / attack / cue 六处。
