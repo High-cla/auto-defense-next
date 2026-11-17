@@ -93,6 +93,75 @@ end
 
 Q.attach(log)
 
+-- 1.6.5 (audit P0-2): the offline tests run LuaJIT (Lua 5.1) while the game runs
+-- Lua 5.4, so the two calls that only exist in 5.4 go through one layer
+-- (Scripts/ad_compat.lua when present, an inline fallback that cannot throw when
+-- not). The version is logged once, so "the game is 5.4" is evidence, not a guess.
+-- One table, not four locals: the main chunk is at the 200-active-locals ceiling.
+local RT = { out = {} }
+do
+    local ok, m = pcall(dofile, MOD_DIR .. "Scripts/ad_compat.lua")
+    if ok and type(m) == "table" then RT.compat = m end
+end
+function RT.gc(mode)
+    if RT.compat and RT.compat.gc then return RT.compat.gc(mode) end
+    if pcall(collectgarbage, mode) then return true end
+    return pcall(collectgarbage, "collect")
+end
+-- atan2 for the yaw: 5.4 takes (y, x), 5.1 only takes (y / x)
+function RT.atan(y, x)
+    if RT.compat and RT.compat.atan then return RT.compat.atan(y, x) end
+    if x == 0 then return y >= 0 and math.pi / 2 or -math.pi / 2 end
+    local a = math.atan(y / x)
+    if x < 0 then a = a + (y >= 0 and math.pi or -math.pi) end
+    return a
+end
+-- yaw of the pawn, or the controller's when the pawn has no forward vector;
+-- hoisted out of the dodge path so the frame does not build a closure (audit P1-2)
+function RT.yawOf(p)
+    local fw = p:GetActorForwardVector()
+    if fw and (math.abs(fw.X) + math.abs(fw.Y)) > 0.1 then return RT.atan(fw.Y, fw.X) end
+    return math.rad(UEHelpers.GetPlayerController():GetControlRotation().Yaw)
+end
+-- read probes that ran as pcall(function() ... end) on every tick: a named
+-- function costs one call and no allocation (audit P1-2). unwrap is the module
+-- local from ad_query, so nothing here captures a variable.
+-- 1.6.5 (audit P1-9): four slightly different name rules wrote and read the same
+-- timeline (path strip, ":ExecutionTimeline", "_C"). ad_query.M.baseName is the one
+-- definition; this delegates to it and keeps the old behaviour if an older module
+-- copy is on disk, so a half-updated install still matches its own keys.
+function RT.bname(s)
+    if Q.baseName then return Q.baseName(s) end
+    if type(s) ~= "string" or s == "" then return nil end
+    local k = s:gsub("^.*[/%.]", "")
+    return (k:gsub(":.*$", ""):gsub("_C$", ""):gsub("_C$", ""))
+end
+function RT.pawnOf(ctrl) return ctrl.Pawn end
+function RT.curOf(set) return set.CurrentValue end
+function RT.hitTimeOf(d) return tonumber(unwrap(d.HitGameTime)) end
+function RT.isDodgeOf(d) return unwrap(d.IsDodge) end
+function RT.sourceOf(d) return unwrap(d.SourceAction) end
+function RT.bulletOf(s) return tonumber(unwrap(s.DeflectBulletType)) end
+function RT.classOf(s) return s:GetClass() end
+function RT.fnameOf(o) return o:GetFName():ToString() end
+function RT.tagStr(t) return t.TagName:ToString() end
+function RT.endAbility(ab) ab:K2_EndAbility() end
+function RT.cancelAbility(ab) ab:K2_CancelAbility() end
+function RT.setShachi(set, v) set.Shachi.BaseValue = v set.Shachi.CurrentValue = v end
+function RT.resetPerfect(ps)
+    ps["Reset Perfect Window Punishment"](ps)
+    ps["Last Deflect Click"] = -100
+    ps["Current Perfect Window Counter"] = 0
+end
+-- the same rule for "invulnerable right now": a per-tick ledger line for one
+-- condition fills the budget, so each key writes once a session (audit P1-8)
+RT.kindsAll, RT.kindsRed, RT.kindsDodge = { true, false }, { true }, { false, true }
+do
+    local jitv = rawget(_G, "jit")
+    log("runtime: %s%s%s", _VERSION or "?", jitv and (" / " .. tostring(jitv.version)) or " / no JIT",
+        RT.compat and " / ad_compat" or " / inline compat")
+end
+
 -- attacks_log.txt: diagnostic timeline of incoming hits, our reactions and the
 -- player's health drops (to find attacks the mod does not handle)
 local ATTACK_LOG_MAX = 30000
@@ -251,14 +320,14 @@ end
 -- the shim hands the bridge the name the bridge watches (see ad_menu_bridge.lua).
 do
     local ok, result, shim = pcall(function()
-        local json = dofile(MOD_DIR .. "Scripts\\ad_json.lua")
+        local json = dofile(MOD_DIR .. "Scripts/ad_json.lua")
         local logFn = function(msg) log("%s", msg) end
         local okShim, bridge = pcall(function()
-            local B = dofile(MOD_DIR .. "Scripts\\ad_menu_bridge.lua")
+            local B = dofile(MOD_DIR .. "Scripts/ad_menu_bridge.lua")
             return B.new({ modDir = MOD_DIR, log = logFn })
         end)
         if okShim then shim = bridge else log("menu bridge shim unavailable: %s", tostring(bridge)) end
-        local menu = dofile(MOD_DIR .. "Scripts\\menu_config.lua")
+        local menu = dofile(MOD_DIR .. "Scripts/menu_config.lua")
         return menu.new(settings, { dir = MOD_DIR, json = json,
             eventsAlt = shim and shim.eventsAlt or nil,
             keyValid = function(k) return hk.parse(k) ~= nil end,
@@ -373,7 +442,7 @@ local tagLibrary, component, ascOf, nowOf = Q.tagLibrary, Q.component, Q.ascOf, 
 -- query's). The OutFrame struct does not come back readable through UE4SS, so
 -- the query's own MaxPreimpactTime does the timing.
 local function nearest(deflect, isDodge, window)
-    local handle = deflect:GetNearestValidReceivedFrame(360.0, window, isDodge, -1, {})
+    local handle = deflect:GetNearestValidReceivedFrame(360.0, window, isDodge, -1, RT.out)
     return tonumber(unwrap(handle)) or -1
 end
 
@@ -451,6 +520,41 @@ do
         end
         if tl.emit then tl.emit("error", what, n, 0) end
     end
+    -- 1.6.5 (audit P0-4): 27 call sites used a bare pcall and lost the reason a
+    -- press, a hook or a query failed. tl.try keeps pcall's shape and reports the
+    -- failure through the one channel above (first 3 per what, traceback on the first)
+    function tl.try(what, fn, ...)
+        local ok, a, b = pcall(fn, ...)
+        if ok then return a, b end
+        tl.err(what, a)
+        return nil
+    end
+    -- 1.6.5 (audit P1-4): a RegisterHook id was thrown away, so a hook could never
+    -- be removed (no UnregisterHook anywhere). The id is kept per logical hook; a
+    -- nil id is legal (the return is not documented), it just cannot be removed.
+    -- Declared here, not with the other RT helpers: they run before "tl" exists.
+    function RT.rememberHook(key, handle)
+        local ids = tl.hookIds
+        if not ids then ids = {} tl.hookIds = ids end
+        if handle ~= nil then ids[key] = handle end
+        return handle
+    end
+    function RT.unhook(key)
+        local ids = tl.hookIds
+        local handle = ids and ids[key]
+        if handle == nil then return false end
+        ids[key] = nil
+        if pcall(UnregisterHook, handle) then return true end
+        tl.err("unhook " .. tostring(key), "UnregisterHook failed")
+        return false
+    end
+    function RT.unhookAll()
+        local ids = tl.hookIds
+        if not ids then return 0 end
+        local n = 0
+        for key in pairs(ids) do if RT.unhook(key) then n = n + 1 end end
+        return n
+    end
 end
 
 -- 1.6.1: in-process, asynchronous, read-only observability bus + budgeted warm-up.
@@ -460,7 +564,7 @@ end
 do
     local function install()
         tl.DRAIN_N = 16
-        local A = dofile(MOD_DIR .. "Scripts\\ad_async.lua")
+        local A = dofile(MOD_DIR .. "Scripts/ad_async.lua")
         tl.bus, tl.warm = A.events(512), A.warm()
         tl.emit = function(...)
             if not settings.events then return end
@@ -506,11 +610,7 @@ end
 do
     local D = { ready = false, why = "not loaded" }
     local idx, M, mont, amt = {}, {}, {}, {}
-    local function base(n)
-        if type(n) ~= "string" or n == "" then return nil end
-        local s = n:gsub("^.*%.", ""):gsub(":.*$", "")
-        return (s:gsub("_C$", ""))
-    end
+    local function base(n) return RT.bname(n) end -- one rule, see RT.bname (audit P1-9)
     local function rec(n)
         local b = base(n)
         if not b then return nil end
@@ -837,6 +937,15 @@ do
         if count <= 1 or #buf >= 8 or os.clock() - at >= FLUSH_EVERY then flush() end
     end
     tl.ledFlush = flush -- a state change that matters (PBZPerfectDefense taking the guard) goes out at once
+    -- 1.6.5 (audit P1-8): the invulnerable-player notice fired every tick of every
+    -- invulnerable frame inside a 6000-line budget; a key writes once a session
+    local seen = {}
+    tl.ledOnce = function(key, fmt, ...)
+        if seen[key] then return false end
+        seen[key] = true
+        tl.led(fmt, ...)
+        return true
+    end
     tl.led("session: v%s read_frames=%s parry_lead=%s dodge_lead=%.0fms dodge_gap=%.0fms pair_frames=%s receipt=%s%s",
         tl.VERSION, settings.readFrames and "on" or "off", tostring(settings.parryLeadCfg), (settings.dodgeLead or 0) * 1000,
         (settings.dodgeGap or 0) * 1000, settings.pairFrames and "on" or "off", settings.receipt and "on" or "off",
@@ -955,11 +1064,11 @@ do
         local now = os.clock()
         if now < PD.nextAt then return end
         PD.nextAt = now + 2
-        pcall(PD.refresh)
+        tl.try("PD refresh", PD.refresh)
     end
     tl.guardOwned = function() return PD.ownsGuard() end
     tl.pd = PD
-    pcall(PD.refresh)
+    tl.try("PD refresh", PD.refresh)
     if settings.pbzpd == "off" then log("pbzpd: off, this mod guards as it always did") end
 end
 
@@ -978,10 +1087,10 @@ do
     --   receipt  - Last Deflect Click says whether the game saw the press at all.
     -- read_frames = off: the queries alone (the 1.4.2 behaviour).
     local FX, FX_SEEN, fxTicks = {}, {}, 0
-    tl.FX = FX
+    local function rawName(o) return o:GetFName():ToString() end
     local function fxName(o)
         if not valid(o) then return nil end
-        local ok, n = pcall(function() return o:GetFName():ToString() end)
+        local ok, n = pcall(rawName, o)
         return ok and n or nil
     end
     -- This pass runs every frame, so its tables and closures are kept (1.4.3: the
@@ -996,18 +1105,18 @@ do
         if not e then
             e = {}
             FX[h] = e
-            local okd, isDodge = pcall(function() return unwrap(data.IsDodge) end)
+            local okd, isDodge = pcall(RT.isDodgeOf, data)
             if okd then e.dodge = isDodge == true end
-            local oks, src = pcall(function() return unwrap(data.SourceAction) end)
+            local oks, src = pcall(RT.sourceOf, data)
             if oks and valid(src) then
-                local okb, bt = pcall(function() return tonumber(unwrap(src.DeflectBulletType)) end)
+                local okb, bt = pcall(RT.bulletOf, src)
                 if okb then e.type = bt end
-                local okc, cls = pcall(function() return src:GetClass() end)
+                local okc, cls = pcall(RT.classOf, src)
                 if okc then e.src = fxName(cls) end
             end
         end
         -- the hit time can be set a tick late, and a reused handle starts a new hit
-        local okh, hit = pcall(function() return tonumber(unwrap(data.HitGameTime)) end)
+        local okh, hit = pcall(RT.hitTimeOf, data)
         if okh and hit and (not e.hit or math.abs(e.hit - hit) > 0.02) then e.hit = hit end
         FX_SEEN[h] = fxTicks
     end
@@ -1131,10 +1240,10 @@ do
     -- TAP_GAP of the last one just keeps the key down: 1.4.1, 31 of 192)
     tl.pairTimeline = function(name, due, gameNow)
         if not settings.pairFrames or not settings.readFrames or not name or not due or not gameNow then return false end
-        local base = name:gsub("_C$", "")
+        local base = RT.bname(name) or name
         for _, e in pairs(FX) do
             if e.hit and e.src then
-                local src = e.src:gsub("_C$", "")
+                local src = RT.bname(e.src) or e.src
                 if src == base or src:find(base, 1, true) then
                     local d = e.hit - gameNow
                     if d > -0.05 and math.abs(d - due) <= 0.25 then return true end
@@ -1209,7 +1318,7 @@ do
             tl.retryAt = os.clock()
             if busy and tl.releaseHeldKey then pcall(tl.releaseHeldKey) end
             tl.led("receipt h=%d: pressing again", r.h)
-            pcall(tl.pressTap, r.h, r.game)
+            tl.try("pressTap", tl.pressTap, r.h, r.game)
         end
     end
 end
@@ -1257,7 +1366,9 @@ do
                         if h.t ~= "4" and h.t ~= "5" and h.t ~= "6" then h[3] = true end
                     end
                 end
-                if #hits > 0 then TL.put(k, hits) end
+                -- 12 of the 2,507 shipped keys still carried "_C" and were
+                -- unreachable from every lookup, which all strip it (audit P1-9)
+                if #hits > 0 then TL.put(RT.bname(k) or k, hits) end
             end
         end
         f:close()
@@ -1308,6 +1419,7 @@ end
 tl.addHit = function(name, s, d, t, cast)
     -- TL.add returns the store's own list: writing to a fresh table here lost the
     -- first learned hit of an unlisted ability and counted the key anyway (audit P0-4)
+    name = RT.bname(name) or name -- a learned "GA_X_C" used to open a second key (audit P1-9)
     local h = { s, d, false, false, false, t = "0", learned = true, learnedQ = cast }
     tl.setType(h, t)
     TL.addRow(name, h)
@@ -1440,7 +1552,7 @@ tl.tickGuardBreak = function(pawn, now)
     log("guard broken (%s): %s", st.name, what)
     attackLog("  -> guard broken (%s): %s", st.name, what)
     if bq and settings.learn and (settings.parry or settings.dodge ~= "off") then
-        pcall(tl.learnFail, bq, bj, "broke the guard through", "guard break")
+        tl.try("learnFail", tl.learnFail, bq, bj, "broke the guard through", "guard break")
     end
 end
 
@@ -1539,8 +1651,7 @@ if TL.count() > 0 then enemyScanWanted = true end -- the boss may already be the
 -- ~9 MB per 10 s); collecting it every few seconds cost frames (120 -> 60 fps
 -- for a moment). Held keys are read at most every KEYS_EVERY s, and the
 -- collector runs in small young-object passes instead of big sweeps.
--- selene: allow(incorrect_standard_library_use)
-collectgarbage("generational") -- the game runs Lua 5.4, where this option exists (the offline luajit tests stub it)
+RT.gc("generational") -- 5.4 only: RT falls back to a full collect on 5.1
 tl.KEYS_EVERY, tl.keyState = 0.03, {}
 tl.keysCached = function(slot)
     local s = tl.keyState[slot]
@@ -1798,9 +1909,7 @@ tl.unpunish = function()
     if settings.perfectMode ~= "give" or not tl.passiveOf or not valid(currentPawn) then return end
     local ps = tl.passiveOf(currentPawn)
     if not ps then return end
-    pcall(function() ps["Reset Perfect Window Punishment"](ps) end)
-    pcall(function() ps["Last Deflect Click"] = -100 end)
-    pcall(function() ps["Current Perfect Window Counter"] = 0 end)
+    tl.try("reset perfect window", RT.resetPerfect, ps)
 end
 -- the window the game opened, read once the press is over (first taps only)
 tl.giveLog = function()
@@ -1838,8 +1947,8 @@ local function tickTapHold()
         if settings.perfectMode == "give" then pcall(tl.giveLog) end
         return
     end
-    pcall(tl.unpunish)
-    pcall(injectKey, tapHold.action)
+    tl.try("unpunish", tl.unpunish)
+    tl.try("injectKey", injectKey, tapHold.action)
 end
 
 -- 1.4.4 (PBZAssist defense.flurry_guard): three listed hits inside 0.25 s are taken
@@ -1895,7 +2004,7 @@ tl.pressTap = function(h, now)
             if tl.tickPerfectNow and valid(currentPawn) then pcall(tl.tickPerfectNow, currentPawn) end
         end
     end
-    pcall(tl.unpunish)
+    tl.try("unpunish", tl.unpunish)
     -- 1.4.3: the game's own count of presses, read before the press (after it, a
     -- press the game already handled in this frame reads as not seen)
     local click0 = settings.receipt and valid(currentPawn) and tl.receipt0(currentPawn) or nil
@@ -1918,7 +2027,7 @@ tl.pressTap = function(h, now)
             tl.recSeen = (tl.recSeen or 0) + 1
         end
         tl.emit("parry", h, now, 1)
-        pcall(tl.noteWindow, currentPawn)
+        tl.try("noteWindow", tl.noteWindow, currentPawn)
         if tapWorks == nil then tapWorks = true log("parry: tapping IA_Deflect") end
         return true
     end
@@ -1947,7 +2056,7 @@ local function tickParry(deflect, input, now)
     if settings.data and tl.dat and tl.dat.ready then
         local inv, invTag = tl.dat.invuln(currentPawn)
         if inv then
-            tl.led("parry: player invulnerable (%s), not pressed", invTag ~= "" and invTag or "-")
+            tl.ledOnce("invuln", "parry: player invulnerable (%s), not pressed", invTag ~= "" and invTag or "-")
             return
         end
     end
@@ -2041,12 +2150,7 @@ local function dodge(input, kind, h, now, retry)
     -- AM_Hun_Long_Dodge_B, "the character does not roll"). The stick is pushed
     -- left or right of the camera (alternating) ROLL_LEAD s before the press.
     if not retry and tl.ROLL and tl.moveDir and valid(currentPawn) and not (tl.moveBusy and tl.moveBusy()) then
-        local okY, yaw = pcall(function()
-            local fw = currentPawn:GetActorForwardVector()
-            -- selene: allow(incorrect_standard_library_use)
-            if fw and (math.abs(fw.X) + math.abs(fw.Y)) > 0.1 then return math.atan(fw.Y, fw.X) end -- Lua 5.4: atan(y, x)
-            return math.rad(UEHelpers.GetPlayerController():GetControlRotation().Yaw)
-        end)
+        local okY, yaw = pcall(RT.yawOf, currentPawn)
         if okY and yaw then
             tl.rollSide = -tl.rollSide
             tl.moveDir(currentPawn, { -math.sin(yaw) * tl.rollSide, math.cos(yaw) * tl.rollSide }, os.clock() + tl.ROLL_LEAD + tl.ROLL_HOLD)
@@ -2146,7 +2250,7 @@ end
 local function tickDodge(deflect, input, now)
     if settings.dodge == "off" or (dodgeFailed and os.clock() < dodgeFailed) then return end
     -- a special (black flash) attack is a normal-query hit that must be dodged
-    local kinds = (settings.dodge == "all" or specialActive()) and { true, false } or { true }
+    local kinds = (settings.dodge == "all" or specialActive()) and RT.kindsAll or RT.kindsRed
     -- 1.4.3 (PBZAssist timing.dodge_lead_ms): the window is the lead the press
     -- needs plus the roll lead dodge() defers by, so the press lands dodge_lead
     -- before the hit (0.16 with a 0.1 s roll left 0.06 s of margin, and the roll
@@ -2209,11 +2313,11 @@ tl.prunable[#tl.prunable + 1] = warned -- same TTL as the handle tables (audit P
 -- object name without its path
 local function short(o)
     if not valid(o) then return "-" end
-    local ok, n = pcall(function() return o:GetFName():ToString() end)
+    local ok, n = pcall(RT.fnameOf, o)
     return ok and n or "?"
 end
 local function trackFrames(deflect, now)
-    for _, isDodge in ipairs({ false, true }) do
+    for _, isDodge in ipairs(RT.kindsDodge) do
         local h = nearest(deflect, isDodge, WARN_WINDOW)
         if h >= 0 and (warned[h] or -1e9) <= os.clock() - tl.HANDLE_TTL then
             warned[h] = os.clock()
@@ -2339,8 +2443,8 @@ local function trackHealth(pawn, now)
         if not hpSet then hpPawn = nil return end
         tl.hpTries = 0
     end
-    local okH, hp = pcall(function() return hpSet.Health.CurrentValue end)
-    local okM, max = pcall(function() return hpSet.Health_Max.CurrentValue end)
+    local okH, hp = pcall(RT.curOf, hpSet.Health)
+    local okM, max = pcall(RT.curOf, hpSet.Health_Max)
     if not okH or type(hp) ~= "number" then return end
     max = okM and type(max) == "number" and max or nil
     if hpLast and hp < hpLast - 0.5 and not (max and hpMaxLast and max < hpMaxLast - 0.5) then
@@ -2495,7 +2599,7 @@ end
 
 local tlStarted = {} -- ability address -> os.clock() it was last queued (hook and poll both see it)
 local function queueTimeline(ab, name, actor, pawn, via)
-    local base = name:gsub("_C$", "")
+    local base = RT.bname(name) or name
     local hits = hitTimes[base]
     if not hits or not actor or not valid(pawn) then return nil end
     local a = ab:GetAddress()
@@ -2673,7 +2777,7 @@ local function discoverTasks(abs)
         if seen[cn] then return end
         seen[cn] = true
         local fns, all = {}, {}
-        pcall(function()
+        tl.try("stance functions", function()
             cls:ForEachFunction(function(fn)
                 local n = fn:GetFName():ToString()
                 all[#all + 1] = n
@@ -2697,13 +2801,13 @@ local function classChainDump(o, stopAt, fnFilter, label)
         local cn = short(cls)
         if stopAt and cn == stopAt then break end
         local fns, props = {}, {}
-        pcall(function()
+        tl.try("class functions filtered", function()
             cls:ForEachFunction(function(fn)
                 local n = fn:GetFName():ToString()
                 if not fnFilter or fnFilter(n:lower()) then fns[#fns + 1] = n end
             end)
         end)
-        pcall(function()
+        tl.try("class properties", function()
             cls:ForEachProperty(function(prop)
                 local n = prop:GetFName():ToString()
                 local okV, v = pcall(function() return unwrap(o[n]) end)
@@ -2772,6 +2876,7 @@ local function checkRelease(pawn)
     end
     releaseCheck = nil
 end
+tl.checkRelease = checkRelease -- test seam: exposed as __CHECK_RELEASE under the marker
 
 local RELEASE_FROM_OUTSIDE = false -- never set: releaseHeldGuard's own release path is dormant (audit P2-1)
 local function releaseHeldGuard(pawn, deflect)
@@ -2884,7 +2989,7 @@ do
             for _, n in ipairs({ "IA_Sprint", "IA_Dodge" }) do
                 local a = findAction(n)
                 if a and okS and valid(sub) then
-                    pcall(function()
+                    tl.try("sprint keys", function()
                         local keys = unwrap(sub:QueryKeysMappedToAction(a))
                         for _, k in pairs(type(keys) == "table" and keys or {}) do sprintKeys[#sprintKeys + 1] = unwrap(k) end
                     end)
@@ -2931,14 +3036,15 @@ do
     local function hookStanceFrame()
         if frameHooked or os.clock() < nextHookTry then return end
         nextHookTry = os.clock() + 5
-        local ok, err = pcall(RegisterHook, STANCE_FRAME_FN, function(...)
+        local ok, ret = pcall(RegisterHook, STANCE_FRAME_FN, function(...)
             local t0 = settings.perf and os.clock()
             local okH, e = pcall(onStanceFrame, ...)
             if t0 then tl.perfAdd(tl.perf.hooks, os.clock() - t0) end
             if not okH then rlog("late attack hook error: %s", tostring(e)) end
         end)
         frameHooked = ok
-        rlog("late attack hook: %s", ok and "hooked" or ("not yet: " .. tostring(err)))
+        if ok then RT.rememberHook("stance frame", ret) end
+        rlog("late attack hook: %s", ok and "hooked" or ("not yet: " .. tostring(ret)))
     end
 
     -- timeline parry: a held guard does not stop these hits (test5: stance on,
@@ -3087,7 +3193,7 @@ do
             end
         end
         local held = {}
-        pcall(function()
+        tl.try("move keys", function()
             local ctrl = UEHelpers.GetPlayerController()
             for _, k in ipairs(tl.MOVE_KEYS) do
                 if ctrl:IsInputKeyDown({ KeyName = FName(k) }) then held[#held + 1] = k end
@@ -3283,7 +3389,7 @@ do
                 travelDelay[e.name] = old and (old * 0.5 + got * 0.5) or got
                 attackLog("  -> flying %s: hit %.2fs after spawn, flight time now %.2f", e.name, got, travelDelay[e.name])
                 log("learned: %s flies %.2f s (hit %.2f s after the spawn), saved", e.name, travelDelay[e.name], got)
-                pcall(tl.saveFlight, e.name)
+                tl.try("saveFlight", tl.saveFlight, e.name)
                 tl.learnUsed = tl.learnHit
                 break
             end
@@ -3352,7 +3458,7 @@ do
     tickTimelineGuard = function(pawn, deflect)
         local now = os.clock()
         tickArea(pawn, now)
-        pcall(tl.tickGuardBreak, pawn, now)
+        tl.try("tickGuardBreak", tl.tickGuardBreak, pawn, now)
         tl.tickRedBullets(pawn, now)
         tl.tickTornado(pawn, now)
         if #tlQueue == 0 then tl.hitSoon, tl.soon = false, false return end
@@ -3452,7 +3558,7 @@ do
                 if not dodgeIt and not q.tapped[j] and t >= h[1] - TL_TAP_LEAD * rate
                     and q.flurry and q.flurry[j] then
                     q.tapped[j] = true
-                    pcall(tl.holdGuard, now + (h[1] + h[2] - t) / rate + 0.15, q.name)
+                    tl.try("holdGuard", tl.holdGuard, now + (h[1] + h[2] - t) / rate + 0.15, q.name)
                 elseif not dodgeIt and not q.tapped[j] and t >= h[1] - TL_TAP_LEAD * rate
                     and settings.parry and not (parryFailed and os.clock() < parryFailed)
                     and not (settings.dodge ~= "off" and specialActive())
@@ -3577,7 +3683,7 @@ do
                 if tl.stanceUp(pawn) then attackLog("  -> guard still up %.2fs after dropping it (%s)", tl.DODGE_AFTER_GUARD, df.kind) end
                 tl.dodgeWatch = nil
                 if df.note and tl.pushNow then
-                    pcall(tl.pushNow, pawn)
+                    tl.try("pushNow", tl.pushNow, pawn)
                     if DEBUG then
                         local okI, iv = pcall(function() return pawn:GetLastMovementInputVector() end)
                         local okR, fw = pcall(function() return pawn:GetActorForwardVector() end)
@@ -3706,7 +3812,7 @@ deflectKeyHeld = function()
     if deflectKeys == nil then
         tl.deflectKeyTries, tl.deflectKeyAt = (tl.deflectKeyTries or 0) + 1, os.clock() + 5
         deflectKeys = {}
-        pcall(function()
+        tl.try("deflect keys", function()
             local lib = obj("/Script/Engine.Default__SubsystemBlueprintLibrary")
             local sub = lib:GetLocalPlayerSubSystemFromPlayerController(ctrl,
                 obj("/Script/EnhancedInput.EnhancedInputLocalPlayerSubsystem"))
@@ -3733,7 +3839,7 @@ local function stanceFieldValues(pawn)
         local guard = 0
         while okC and valid(cls) and guard < 12 do
             guard = guard + 1
-            pcall(function()
+            tl.try("force properties", function()
                 cls:ForEachProperty(function(prop)
                     local n = prop:GetFName():ToString()
                     local l = n:lower()
@@ -3769,7 +3875,7 @@ local function watchManualDodge()
     if not valid(ctrl) then return end
     if dodgeKeys == nil then
         dodgeKeys = {}
-        pcall(function()
+        tl.try("dodge keys", function()
             local lib = obj("/Script/Engine.Default__SubsystemBlueprintLibrary")
             local sub = lib:GetLocalPlayerSubSystemFromPlayerController(ctrl,
                 obj("/Script/EnhancedInput.EnhancedInputLocalPlayerSubsystem"))
@@ -3849,8 +3955,8 @@ endStance = function(pawn, why)
     local ended = {}
     for _, ab in ipairs(stanceAbilities(pawn)) do
         if valid(ab) and abilityActive(ab) ~= false then
-            pcall(function() ab:K2_EndAbility() end)
-            if hasTag(asc, "Ability.Action.Stance") then pcall(function() ab:K2_CancelAbility() end) end
+            tl.try("stance end", RT.endAbility, ab)
+            if hasTag(asc, "Ability.Action.Stance") then tl.try("stance cancel", RT.cancelAbility, ab) end
             ended[#ended + 1] = short(ab:GetClass())
         end
     end
@@ -3959,7 +4065,7 @@ local function onActivate(ctx)
     -- P2_GEx_01 grab at 4.80, the early dodges below only wasted the dodge)
     local okG, gdist = pcall(function() return tonumber(unwrap(actor:GetDistanceTo(currentPawn))) end)
     local mine = okG and gdist and gdist <= TL_NEAR and tl.towardPlayer(actor, currentPawn, gdist)
-    if mine and n:find("GEx", 1, true) and not hitTimes[(n:gsub("_C$", ""))] and os.clock() - tl.grabAt > 0.3 then
+    if mine and n:find("GEx", 1, true) and not hitTimes[RT.bname(n) or n] and os.clock() - tl.grabAt > 0.3 then
         tl.grabAt, tl.grabName = os.clock(), n
         -- test10f: a dodge at +0.34 and at the frame (+0.49) were both refused
         -- (perfect dodge false) and the player was grabbed: also dodge right at
@@ -3989,7 +4095,7 @@ local function onActivate(ctx)
     end
     if mine then
         tl.enemyAt = os.clock()
-        tl.lastEnemy, tl.lastEnemyAt, tl.lastEnemyDist = n:gsub("_C$", ""), os.clock(), gdist
+        tl.lastEnemy, tl.lastEnemyAt, tl.lastEnemyDist = RT.bname(n) or n, os.clock(), gdist
         tl.lastEnemyActor = actor
     end
     if DEBUG then attackLog("ENEMY %s activates %s%s", short(actor), n, tlNote or "") end
@@ -4067,13 +4173,13 @@ tl.hookBullets = function()
         -- debug off: only SendDeflectFrame, for tl.bulletUntil (a far shot is
         -- still parried) and the tornado
         if not tl.bulletHooked[fn] and (DEBUG or i == 1) then
-            local ok, err = pcall(RegisterHook, fn, function(ctx, ...)
+            local ok, ret = pcall(RegisterHook, fn, function(ctx, ...)
                 local okB, e = pcall(tl.bulletInfo, fn, ctx, ...)
                 if not okB then tl.err("bullet hook", e) end
             end)
-            if ok then tl.bulletHooked[fn] = true end
+            if ok then tl.bulletHooked[fn] = true RT.rememberHook(fn, ret) end
             if ok or activationTries == 1 or activationTries == 12 then
-                log("bullet probe %s: %s", fn:match("([%w_]+:[%w_]+)$") or fn, ok and "hooked" or tostring(err))
+                log("bullet probe %s: %s", fn:match("([%w_]+:[%w_]+)$") or fn, ok and "hooked" or tostring(ret))
             end
         end
     end
@@ -4128,7 +4234,7 @@ tl.onDeflectEffect = function(_ctx, ...)
         local okR, res, who = false, nil, nil
         if okD and data then okR, res, who = pcall(function() return data.DeflectResult, data.DefenderAvatar end) end
         local okT0, tn = false, nil
-        if okR and res ~= nil then okT0, tn = pcall(function() return res.TagName:ToString() end) end
+        if okR and res ~= nil then okT0, tn = pcall(RT.tagStr, res) end
         if okT0 and type(tn) == "string" and tn ~= "" then
             local mine = valid(currentPawn) and valid(who) and who:GetAddress() == currentPawn:GetAddress()
             tl.effectSeen = (tl.effectSeen or 0) + 1
@@ -4137,7 +4243,7 @@ tl.onDeflectEffect = function(_ctx, ...)
                 attackLog("EFFECT %s defender %s%s", okT0 and tn or "?", okW and wn or "?", mine and " [player]" or "")
             end
             if not mine then return end
-            local okT, txt = pcall(function() return res.TagName:ToString() end)
+            local okT, txt = pcall(RT.tagStr, res)
             txt = okT and txt or "?"
             tl.countResult("deflect " .. (txt:match("([^%.]+)$") or txt), math.max(lastTapAt or -10, tl.keyDownAt or -10))
             return
@@ -4162,13 +4268,13 @@ tl.resultHooked = {}
 tl.hookResults = function()
     for _, e in ipairs(tl.RESULT_FNS) do
         if not tl.resultHooked[e[1]] then
-            local ok, err = pcall(RegisterHook, e[1], function(ctx, ...)
+            local ok, ret = pcall(RegisterHook, e[1], function(ctx, ...)
                 local okH, er = pcall(tl[e[2]], ctx, ...)
                 if not okH then tl.err("result hook", er) end
             end)
-            if ok then tl.resultHooked[e[1]] = true end
+            if ok then tl.resultHooked[e[1]] = true RT.rememberHook(e[1], ret) end
             if ok or activationTries == 1 or activationTries == 12 then
-                log("result hook %s: %s", e[1]:match("([%w_ ]+:[%w_ ]+)$") or e[1], ok and "hooked" or tostring(err))
+                log("result hook %s: %s", e[1]:match("([%w_ ]+:[%w_ ]+)$") or e[1], ok and "hooked" or tostring(ret))
             end
         end
     end
@@ -4177,19 +4283,19 @@ end
 local function hookActivation()
     if activationTries >= 12 or os.clock() < activationTry then return end
     activationTry, activationTries = os.clock() + 5, activationTries + 1
-    pcall(tl.hookBullets)
-    pcall(tl.hookResults)
+    tl.try("bullet hook", tl.hookBullets)
+    tl.try("result hook", tl.hookResults)
     for _, fn in ipairs(ACTIVATE_FNS) do
         if not activationHooked[fn] then
-            local ok, err = pcall(RegisterHook, fn, function(ctx)
+            local ok, ret = pcall(RegisterHook, fn, function(ctx)
                 local t0 = settings.perf and os.clock()
                 local okH, e = pcall(onActivate, ctx)
                 if t0 then tl.perfAdd(tl.perf.hooks, os.clock() - t0) end
                 if not okH then tl.err("activation hook", e) end
             end)
-            if ok then activationHooked[fn], tl.activationHooked = true, true end
+            if ok then activationHooked[fn], tl.activationHooked = true, true RT.rememberHook(fn, ret) end
             if ok or activationTries == 1 or activationTries == 12 then
-                log("activation hook %s: %s", fn:match("([%w_]+_C:)") or fn, ok and "hooked" or tostring(err))
+                log("activation hook %s: %s", fn:match("([%w_]+_C:)") or fn, ok and "hooked" or tostring(ret))
             end
         end
     end
@@ -4278,13 +4384,14 @@ local function hookAttacks(deflect)
         log("attack hook: class of Deflect Component unknown, retrying in 10 s")
         return
     end
-    local ok, err = pcall(function()
-        RegisterHook(path .. ":SendDeflectFrame", function(...)
+    local ok, ret = pcall(function()
+        return RegisterHook(path .. ":SendDeflectFrame", function(...)
             local okR, e = pcall(onSendFrame, ...)
             if not okR then log("attack hook error: %s", tostring(e)) end
         end)
     end)
-    log("attack hook: %s", ok and ("hooked " .. path .. ":SendDeflectFrame") or ("not hooked: " .. tostring(err)))
+    if ok then RT.rememberHook("attack", ret) end
+    log("attack hook: %s", ok and ("hooked " .. path .. ":SendDeflectFrame") or ("not hooked: " .. tostring(ret)))
 end
 
 -- ---------------------------------------------------------------- gameplay cues
@@ -4348,8 +4455,8 @@ local function tickShachi(pawn)
     local dt = t - (shachiAt - REGEN_TICK)
     shachiAt = t + REGEN_TICK
     if not valid(hpSet) or hpPawn ~= pawn:GetAddress() then return end
-    local okC, cur = pcall(function() return hpSet.Shachi.CurrentValue end)
-    local okM, max = pcall(function() return hpSet.Shachi_Max.CurrentValue end)
+    local okC, cur = pcall(RT.curOf, hpSet.Shachi)
+    local okM, max = pcall(RT.curOf, hpSet.Shachi_Max)
     if not okC or type(cur) ~= "number" or not okM or type(max) ~= "number" then return end
     if shachiLast and cur < shachiLast - SPEND_DROP then shachiSpentAt = t refilling = true end
     shachiLast = cur
@@ -4359,14 +4466,11 @@ local function tickShachi(pawn)
     if t - shachiSpentAt < REGEN_COOLDOWN then return end
     if not hasTag(ascOf(pawn), "Ability.Action.Stance") or deflectKeyHeld() then return end
     local new = math.min(max, cur + max * REGEN_PER_SEC * math.min(dt, 0.05))
-    pcall(function()
-        hpSet.Shachi.BaseValue = new
-        hpSet.Shachi.CurrentValue = new
-    end)
+    tl.try("shachi regen", RT.setShachi, hpSet, new)
     shachiLast = new
     if not shachiChecked then
         shachiChecked = true
-        local okR, back = pcall(function() return hpSet.Shachi.CurrentValue end)
+        local okR, back = pcall(RT.curOf, hpSet.Shachi)
         log("sat khi regen: %.1f -> %.1f, read back %s", cur, new, okR and tostring(back) or "error")
         local okL, list = pcall(function()
             local lib = obj("/Script/GameplayAbilities.Default__AbilitySystemBlueprintLibrary")
@@ -4393,7 +4497,7 @@ local function player()
         controller = UEHelpers.GetPlayerController()
     end
     if not valid(controller) then return nil end
-    local ok, p = pcall(function() return controller.Pawn end)
+    local ok, p = pcall(RT.pawnOf, controller)
     return ok and valid(p) and p or nil
 end
 
@@ -4592,7 +4696,7 @@ tl.perfTick = function(t0, t1)
     tl.perf = { at = t1, last = t1, n = 0, sum = 0, max = 0, hooks = { n = 0, sum = 0, max = 0 }, gaps = {} }
     tl.perfSamples, tl.gapN = {}, 0
 end
-tl.ALIVE_EVERY, tl.SILENT, tl.loopId, tl.ticks, tl.tickAt, tl.aliveAt = 300, 10, 0, 0, os.clock(), 0
+tl.ALIVE_EVERY, tl.SILENT, tl.loopId, tl.ticks, tl.tickAt, tl.aliveAt = 5, 10, 0, 0, os.clock(), 0
 -- Warm-up task, run one per tick from the loop: a read-only index of the learned
 -- timeline (hits, first/last, known grab). Built after the load path, so the 69-77 ms
 -- load stays put and the index is ready before the first fight. A failure is
@@ -4601,7 +4705,7 @@ if tl.warm then
     tl.warm.task("timeline index", function()
         local idx, n, grabs = {}, 0, 0
         for name, hits in pairs(hitTimes) do
-            local base = name:gsub("_C$", "")
+            local base = RT.bname(name) or name
             local first, last
             for i = 1, #hits do
                 local v = hits[i]
@@ -4665,27 +4769,32 @@ tl.main = function(id)
     currentPawn = p
     local experiments = settings.dodgeAttacks ~= "" or LEARN
     if deflect and not attackHooked and (DEBUG or experiments) then hookAttacks(deflect) end
-    if deflect and input then
-        local now = nowOf(p)
-        if DEBUG or experiments then guarded("timeline", trackFrames, deflect, now) end
-        guarded("read frames", tl.fxScan, deflect, now) -- 1.4.3: hit times for the presses
-        if DEBUG then guarded("frames probe", tl.probeFrames, p, deflect, now) end
-        guarded("health", trackHealth, p, now)
-        guarded("release", releaseHeldGuard, p, deflect)
-        if DEBUG or experiments or TL.count() > 0 then guarded("enemies", watchEnemies, p) end
-        -- also with parry off: without the hook the object walk above takes over
-        if TL.count() > 0 then guarded("activation hook", hookActivation) end
-        if DEBUG then guarded("stance", watchStance, p, deflect) end
-        if LEARN then guarded("manual dodge", watchManualDodge) end
-        guarded("sat khi", tickShachi, p)
-        guarded("guard release", tickGuardRelease, p, deflect)
-        -- red first: a dodge must not be swallowed by a parry attempt
-        guarded("dodge", tickDodge, deflect, input, now)
-        guarded("timed dodge", tickTimedDodge, input, now)
-        guarded("tap hold", tickTapHold)
-        if settings.receipt then guarded("receipt", tl.tickReceipt, p) end
-        guarded("parry", tickParry, deflect, input, now)
-    end
+    if deflect and input then tl.decide(p, deflect, input, nowOf(p)) end
+    return false
+end
+-- 1.6.5 (audit P0-3): the per-frame decision chain is a named function, so the
+-- offline gate can drive it with fake deflect/input instead of only asserting that
+-- the loop exists. Same order, same guards as before; the test marker exposes it.
+tl.decide = function(p, deflect, input, now)
+    local experiments = settings.dodgeAttacks ~= "" or LEARN
+    if DEBUG or experiments then guarded("timeline", trackFrames, deflect, now) end
+    guarded("read frames", tl.fxScan, deflect, now) -- 1.4.3: hit times for the presses
+    if DEBUG then guarded("frames probe", tl.probeFrames, p, deflect, now) end
+    guarded("health", trackHealth, p, now)
+    guarded("release", releaseHeldGuard, p, deflect)
+    if DEBUG or experiments or TL.count() > 0 then guarded("enemies", watchEnemies, p) end
+    -- also with parry off: without the hook the object walk above takes over
+    if TL.count() > 0 then guarded("activation hook", hookActivation) end
+    if DEBUG then guarded("stance", watchStance, p, deflect) end
+    if LEARN then guarded("manual dodge", watchManualDodge) end
+    guarded("sat khi", tickShachi, p)
+    guarded("guard release", tickGuardRelease, p, deflect)
+    -- red first: a dodge must not be swallowed by a parry attempt
+    guarded("dodge", tickDodge, deflect, input, now)
+    guarded("timed dodge", tickTimedDodge, input, now)
+    guarded("tap hold", tickTapHold)
+    if settings.receipt then guarded("receipt", tl.tickReceipt, p) end
+    guarded("parry", tickParry, deflect, input, now)
     return false
 end
 -- One cancel path: never throws, reports once, and tells the caller whether the
@@ -4707,8 +4816,9 @@ tl.cancelLoop = function(handle)
     end
     return false
 end
-tl.start = function()
+tl.start = function(prefer)
     tl.loopId, tl.ticks, tl.tickAt = tl.loopId + 1, 0, os.clock()
+    tl.loopVerifyAt = nil
     local id = tl.loopId
     -- The UE4SS delayed-action API returns an owned handle. Cancel the previous
     -- watchdog loop before replacing it; otherwise a restart leaves a stale timer
@@ -4753,41 +4863,66 @@ tl.start = function()
     -- Defense decisions sample frame-owned combat state, so prefer the UE4SS
     -- EngineTick scheduler: one callback per rendered/game frame, no 10 ms timer
     -- wakeups between frames. Older UE4SS builds retain the timer fallback.
-    if EngineTickAvailable and type(LoopInGameThreadAfterFrames) == "function" then
-        local ok, handle = pcall(LoopInGameThreadAfterFrames, 1, tick)
-        if ok and handle ~= nil then
-            tl.loopHandle, tl.loopSchedule = handle, "frame"
-            if tl.loopScheduleLogged ~= "frame" then
-                log("main loop scheduler: EngineTick, every 1 frame")
-                tl.loopScheduleLogged = "frame"
+    -- 1.6.5 (audit P1-1): both paths use one rule - the call did not throw means the
+    -- loop is scheduled, and the handle may be nil (a handle-less but working API was
+    -- reported as "no loop at all"). Whether it actually ticks is checked separately:
+    -- tl.loopVerifyAt makes tl.check try the other path once.
+    local function schedule(kind)
+        if kind == "frame" then
+            if not (EngineTickAvailable and type(LoopInGameThreadAfterFrames) == "function") then
+                return false, "no EngineTick scheduler"
             end
-            return
+            local ok, handle = pcall(LoopInGameThreadAfterFrames, 1, tick)
+            if not ok then return false, tostring(handle) end
+            tl.loopHandle, tl.loopSchedule, tl.loopPath = handle, "frame", "frame"
+            return true
         end
-        log("main loop scheduler: frame timer unavailable (%s), falling back to 10 ms",
-            tostring(ok and handle or handle))
-    end
-
-    if type(LoopInGameThreadWithDelay) == "function" then
+        if type(LoopInGameThreadWithDelay) ~= "function" then return false, "no timer API" end
         local ok, handle = pcall(LoopInGameThreadWithDelay, 10, tick)
-        -- A successful call means the loop is scheduled. Requiring a handle here
-        -- turned a handle-less but working API into "no loop at all" (review F1).
-        if ok then
-            tl.loopHandle, tl.loopSchedule = handle, "timer"
-            if tl.loopScheduleLogged ~= "timer" then
-                log("main loop scheduler: 10 ms compatibility timer")
-                tl.loopScheduleLogged = "timer"
-            end
-            return
+        if not ok then return false, tostring(handle) end
+        tl.loopHandle, tl.loopSchedule, tl.loopPath = handle, "timer", "timer"
+        return true
+    end
+    local order = (prefer == "timer") and { "timer", "frame" } or { "frame", "timer" }
+    local okA, whyA = schedule(order[1])
+    if okA then
+        tl.loopVerifyAt = os.clock() + 2
+        if tl.loopScheduleLogged ~= order[1] then
+            tl.loopScheduleLogged = order[1]
+            log("main loop scheduler: %s", order[1] == "frame" and "EngineTick, every 1 frame" or "10 ms compatibility timer")
         end
-        log("main loop scheduler: timer unavailable (%s)", tostring(handle))
+        return
+    end
+    local okB, whyB = schedule(order[2])
+    if okB then
+        tl.loopVerifyAt = os.clock() + 2
+        log("main loop scheduler: %s unavailable (%s), using %s", order[1], tostring(whyA), order[2])
+        if tl.loopScheduleLogged ~= order[2] then
+            tl.loopScheduleLogged = order[2]
+            log("main loop scheduler: %s", order[2] == "frame" and "EngineTick, every 1 frame" or "10 ms compatibility timer")
+        end
+        return
     end
     tl.loopSchedule = "failed"
-    log("main loop scheduler failed: no supported UE4SS delayed-action API")
+    log("main loop scheduler failed: %s (%s); %s (%s)", order[1], tostring(whyA), order[2], tostring(whyB))
 end
 -- force = a human asked for it (hotkey). It restarts even after the automatic
 -- budget is spent, and resets that budget so the watchdog works again (review F3).
 tl.check = function(force)
     local quiet = os.clock() - tl.tickAt
+    -- 1.6.5 (audit P1-1): a scheduler call that returned without throwing may still
+    -- never tick. Two seconds after such a start, with no tick at all, the other
+    -- path is tried once. Only a hotkey or an already-live loop reaches this: the
+    -- watchdog itself runs inside the loop it watches, so automatic recovery from a
+    -- totally silent loop is impossible and is logged instead.
+    if tl.loopVerifyAt and tl.ticks == 0 and os.clock() > tl.loopVerifyAt then
+        local was = tl.loopPath
+        tl.loopVerifyAt = nil
+        log("main loop scheduler: %s scheduled but no tick in %.0f s, forcing the other path",
+            tostring(was), os.clock() - tl.tickAt)
+        tl.start(was == "frame" and "timer" or "frame")
+        return
+    end
     -- A healthy loop must not be restarted by a hotkey press: every restart bumps
     -- the generation and writes a "main loop running" line (review F3).
     if quiet <= tl.SILENT then return end
@@ -4945,4 +5080,10 @@ end
     if not marker then return end
     marker:close()
     _G.__TL, _G.__HK, _G.__S = tl, hk, settings
+    -- audit P0-3: the decision chain had no offline coverage at all
+    _G.__DECIDE, _G.__CHECK_RELEASE = tl.decide, tl.checkRelease
+    _G.__RUNTIME = {
+        version = _VERSION, jit = rawget(_G, "jit") and rawget(_G, "jit").version or nil,
+        compat = RT.compat ~= nil,
+    }
 end)()

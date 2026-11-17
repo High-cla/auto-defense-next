@@ -1,3 +1,4 @@
+--# selene: allow(incorrect_standard_library_use)
 -- Run only in an instrumented TEMP copy, never against the installed mod.
 assert(os.getenv("AD_MENU_TEST") == "1", "requires an isolated test copy")
 local marker = assert(io.open(".ad-menu-test-only", "r"), "refusing to run outside test directory")
@@ -202,6 +203,202 @@ local missing = {}
 for _, name in ipairs(T.api) do if T[name] == nil then missing[#missing + 1] = name end end
 eq(#missing, 0, "documented api names exist: " .. table.concat(missing, ","))
 eq(T.VERSION, "1.6.4", "the version is stated once")
+
+-- 1.6.5 test surface (audit P0-2, P0-3, P1-1): the runtime row, the per-frame
+-- decision chain and the release check are named seams now, so this suite drives
+-- the real code with a fake Deflect / Ability Input Component instead of only
+-- asserting that the loop exists. Everything stays behind the marker file.
+local gaps = {}
+local RT = _G.__RUNTIME
+if type(RT) ~= "table" then gaps[#gaps + 1] = "__RUNTIME" end
+if type(_G.__DECIDE) ~= "function" then gaps[#gaps + 1] = "__DECIDE" end
+if type(_G.__CHECK_RELEASE) ~= "function" then gaps[#gaps + 1] = "__CHECK_RELEASE" end
+if type(T.ledOnce) ~= "function" then gaps[#gaps + 1] = "tl.ledOnce" end
+
+-- B (P0-2): the runtime row states what the chunk runs on, so a 5.4-only call
+-- that silently does nothing on 5.1 is visible instead of guessed from a game log.
+if type(RT) == "table" then
+    eq(type(RT.version), "string", "runtime version is a string")
+    eq((RT.version or ""):sub(1, 3), "Lua", "runtime version is the interpreter's _VERSION")
+    eq(type(RT.compat), "boolean", "runtime compat is a capability flag")
+    eq(RT.jit == nil or type(RT.jit) == "string", true, "runtime jit is a name or absent")
+end
+-- E (P1-5): the documented surface is pinned, not grown by accident
+eq(#T.api, 24, "the public surface stays at the 24 documented names")
+eq(type(T.VERSION) == "string" and T.VERSION:match("^%d+%.%d+%.%d+$") ~= nil, true,
+    "VERSION is semantic: " .. tostring(T.VERSION))
+
+-- A (P0-3): the decision chain's early exits. The fake Deflect Component answers
+-- the queries with fixed handles, the fake Ability Input Component counts the
+-- activations, so "no press because ..." is asserted where the code decides it.
+do
+    local decide = _G.__DECIDE
+    local realStatic, realGuardOwned = StaticFindObject, T.guardOwned
+    local activations = 0
+    local pawn = { IsValid = function() return true end, GetAddress = function() return 902 end,
+        GetActorForwardVector = function() return { X = 1, Y = 0, Z = 0 } end }
+    -- only IA_Deflect resolves: the parry tries then activate through the fake input
+    StaticFindObject = function(path)
+        if type(path) == "string" and path:find("IA_Deflect", 1, true) then
+            return { IsValid = function() return true end, GetFullName = function() return path end }
+        end
+        return nil
+    end
+    local function fakeDeflect(red, normal)
+        return {
+            IsValid = function() return true end,
+            GetAddress = function() return 900 end,
+            ReceiveFrames = { ForEach = function() end },
+            -- red is the IsDodge (undeflectable) handle, normal the deflectable one;
+            -- a window below PARRY_WINDOW is the narrow 1.4.2 re-query
+            GetNearestValidReceivedFrame = function(_, _, window, isDodge, _, _)
+                local h
+                if isDodge == true then h = red else h = normal end
+                if h == nil or (window or 0) < 0.07 then return -1 end
+                return h
+            end,
+        }
+    end
+    local function fakeInput()
+        return {
+            IsValid = function() return true end,
+            GetAddress = function() return 901 end,
+            TryActivateExternalActionAbilityInterruptLowerByTag = function(_, _, _, _)
+                activations = activations + 1
+                return true
+            end,
+        }
+    end
+    if type(decide) == "function" then
+        T.tapEndAt = -100 -- no tap in flight: a due press goes out at once
+        S.parry = false
+        decide(pawn, fakeDeflect(nil, 91), fakeInput(), 100)
+        eq(activations, 0, "parry off: no ability activation")
+        S.parry = true
+        T.guardOwned = function() return true end
+        activations = 0
+        decide(pawn, fakeDeflect(nil, 92), fakeInput(), 100)
+        eq(activations, 0, "PBZPerfectDefense owns the guard: no activation")
+        T.guardOwned = realGuardOwned
+        -- red first: the dodge branch takes the handle, the parry never sees it
+        activations = 0
+        decide(pawn, fakeDeflect(771, nil), fakeInput(), 100)
+        eq(activations, 0, "red hit: never deflected")
+        eq(T.done(771), true, "red hit: the dodge branch took the handle")
+        -- nothing announced inside any window
+        activations = 0
+        decide(pawn, fakeDeflect(nil, nil), fakeInput(), 100)
+        eq(activations, 0, "no announced hit: no activation")
+        -- the normal case: parry on, the guard is ours, a deflectable hit due
+        activations = 0
+        decide(pawn, fakeDeflect(nil, 95), fakeInput(), 100)
+        eq(activations >= 1, true, "a due deflectable hit activates the ability")
+    end
+    StaticFindObject, T.guardOwned, S.parry = realStatic, realGuardOwned, true
+end
+
+-- A (P0-3), second half: the release check must never let a guard
+-- PBZPerfectDefense holds go, and must do nothing while no release is pending.
+-- releaseCheck is a block-local, so what the seam can reach is asserted: the two
+-- early exits neither throw nor write the line the normal path would add.
+do
+    local check = _G.__CHECK_RELEASE
+    local realGuardOwned = T.guardOwned
+    if type(check) == "function" then
+        local pawn = { IsValid = function() return true end, GetAddress = function() return 902 end }
+        local lines0 = T.logState.lines
+        T.guardOwned = function() return true end
+        eq(pcall(check, pawn), true, "checkRelease: guard owned by PBZPerfectDefense, no throw")
+        T.guardOwned = realGuardOwned
+        eq(pcall(check, pawn), true, "checkRelease: no release pending, no throw")
+        eq(T.logState.lines, lines0, "checkRelease records nothing without a pending release")
+    end
+    T.guardOwned = realGuardOwned
+end
+
+-- D (P1-8): a once-a-session notice: one ledger line per key, however often the
+-- condition repeats (the invulnerable-player line fired every tick of a frame).
+do
+    if type(T.ledOnce) == "function" then
+        local a, b = "ledonce-probe-71", "ledonce-probe-72"
+        eq(T.ledOnce("probe71", "once-a %s", a), true, "the first ledOnce for a key writes")
+        eq(T.ledOnce("probe71", "once-b %s", a), false, "a repeated ledOnce key is refused")
+        eq(T.ledOnce("probe72", "once-c %s", b), true, "another key still writes")
+        if T.ledFlush then T.ledFlush() end
+        local seenA, seenB = 0, 0
+        for line in read("auto_defense_ledger.txt"):gmatch("[^\n]+") do
+            if line:find(a, 1, true) then seenA = seenA + 1 end
+            if line:find(b, 1, true) then seenB = seenB + 1 end
+        end
+        eq(seenA, 1, "one ledger line for the repeated key")
+        eq(seenB, 1, "the other key has its own line")
+    end
+end
+
+-- C (P1-1): one success rule for both scheduler APIs (the call did not throw
+-- means scheduled, even with no handle), and a scheduled-but-silent loop is
+-- switched to the other API once instead of being reported as healthy.
+do
+    local realFrame, realTimer, realCancel = LoopInGameThreadAfterFrames, LoopInGameThreadWithDelay, CancelDelayedAction
+    local function stub(kind, name)
+        return function(_, fn)
+            _G.__LOOP = fn
+            if kind == "throw" then error("stub " .. name .. " throws") end
+            if kind == "nil" then return nil end
+            return 4242
+        end
+    end
+    CancelDelayedAction = function() return true end
+    local matrix = {
+        { frame = "nil", timer = "nil", want = "frame" },
+        { frame = "nil", timer = "int", want = "frame" },
+        { frame = "int", timer = "nil", want = "frame" },
+        { frame = "int", timer = "int", want = "frame" },
+        { frame = "throw", timer = "nil", want = "timer" },
+        { frame = "throw", timer = "int", want = "timer" },
+    }
+    for _, c in ipairs(matrix) do
+        EngineTickAvailable = true
+        LoopInGameThreadAfterFrames = stub(c.frame, "frame")
+        LoopInGameThreadWithDelay = stub(c.timer, "timer")
+        T.loopHandle, T.loopStale = nil, nil
+        local ok, err = pcall(T.start)
+        eq(ok, true, "start never throws (frame=" .. c.frame .. " timer=" .. c.timer .. "): " .. tostring(err))
+        eq(T.loopSchedule, c.want, "scheduled as " .. c.want .. " (frame=" .. c.frame .. " timer=" .. c.timer .. ")")
+    end
+    eq(type(T.loopVerifyAt), "number", "a scheduled start arms the tick deadline")
+    -- both apis absent: a recorded failure, not a silent ignore
+    LoopInGameThreadAfterFrames, LoopInGameThreadWithDelay = nil, nil
+    T.loopHandle, T.loopStale = nil, nil
+    local okF = pcall(T.start)
+    eq(okF, true, "start never throws without any scheduler api")
+    eq(T.loopSchedule, "failed", "no scheduler api is recorded as failed")
+    -- the preferred path is honoured (the verification retry asks for the other one)
+    LoopInGameThreadAfterFrames = stub("int", "frame")
+    LoopInGameThreadWithDelay = stub("int", "timer")
+    T.loopHandle, T.loopStale = nil, nil
+    eq(pcall(T.start, "timer"), true, "start(prefer) never throws")
+    eq(T.loopSchedule, "timer", "start(prefer) tries the requested path first")
+    -- a scheduler call that returned but never ticks is switched once, not trusted
+    T.loopHandle, T.loopStale, T.loopId = nil, nil, 1
+    T.tickAt, T.ticks = os.clock() - 30, 0
+    T.start()
+    eq(T.loopSchedule, "frame", "the frame scheduler is preferred for a real start")
+    eq(type(T.loopVerifyAt), "number", "start arms the verification deadline")
+    T.loopVerifyAt, T.tickAt, T.ticks = os.clock() - 0.01, os.clock() - 30, 0
+    T.check()
+    eq(T.loopSchedule, "timer", "no tick after the deadline: the other path is tried")
+    eq(T.loopVerifyAt ~= nil and T.loopVerifyAt > os.clock(), true, "the new path gets its own deadline")
+    LoopInGameThreadAfterFrames, LoopInGameThreadWithDelay = realFrame, realTimer
+    CancelDelayedAction = realCancel
+    EngineTickAvailable = true
+    T.loopHandle, T.loopStale, T.loopId = nil, nil, 1
+    T.tickAt, T.ticks = os.clock(), 0
+    T.start()
+end
+
+eq(#gaps, 0, "the whole test surface is present: " .. table.concat(gaps, ","))
+
 if T.ledFlush then T.ledFlush() end
 local led = read("auto_defense_ledger.txt")
 assert(led:find("v1.6.4", 1, true), "the ledger states the running version: " .. led:sub(1, 200))

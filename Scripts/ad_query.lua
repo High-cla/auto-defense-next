@@ -24,11 +24,14 @@ local function warnOnce(key, fmt, ...)
     logFn(fmt, ...)
 end
 
--- shared readers: pcall(getv, v) instead of pcall(function() return v:get() end)
--- keeps the protection and drops one closure per call on the per-frame paths
+-- shared readers: pcall(fn, args) instead of pcall(function() ... end) keeps
+-- the protection and drops one closure per call on the per-frame paths (P1-2)
 local function str(v) return v:ToString() end
 local function getv(v) return v:get() end
 local function idx(o, k) return o[k] end
+local function getasc(lib, pawn) return lib:GetAbilitySystemComponent(pawn) end
+local function isvalid(o) return o:IsValid() end
+local function getclock(statics, pawn) return statics:GetTimeSeconds(pawn) end
 
 function M.name(v)
     if v == nil then return nil end
@@ -61,11 +64,17 @@ function M.prop(o, k)
     return v
 end
 
--- ability names arrive as "GA_X_C" / "GA_X_C_C" / with a path: one rule for all
+-- Ability names arrive as "GA_X", "GA_X_C", "GA_X_C_C", "/Game/.../GA_X_C" or
+-- with a timeline suffix ("GA_X_C:ExecutionTimeline"). This is the only
+-- normalisation in the mod (P1-9): strip the path, strip the ":suffix", then
+-- strip every trailing "_C". Anything that is not a non-empty string is nil.
 function M.baseName(s)
     if type(s) ~= "string" or s == "" then return nil end
-    local n = s:match("([^%./]+)$") or s
-    n = n:gsub("_C$", "")
+    local n = s:gsub("^.*[./]", "")
+    n = n:gsub(":.*$", "")
+    -- one suffix at a time: Lua patterns cannot repeat a capture, so "_C+$"
+    -- would either strip a real "CCC" or match nothing at all
+    while #n > 2 and n:sub(-2) == "_C" do n = n:sub(1, -3) end
     return n
 end
 
@@ -80,7 +89,19 @@ function M.obj(path)
     return o
 end
 
-function M.tag(s) return { TagName = FName(s) } end
+-- FName construction allocates, and the same handful of tag names is asked for
+-- on every decision, so each distinct name is built once and handed out again
+-- (P1-3). Tag names come from a fixed ability set, so the table stays small; the
+-- returned table is shared, callers must not mutate TagName.
+local TAGS = {}
+function M.tag(s)
+    if type(s) ~= "string" then return { TagName = s } end
+    local t = TAGS[s]
+    if t ~= nil then return t end
+    t = { TagName = FName(s) }
+    TAGS[s] = t
+    return t
+end
 
 -- PBZAbilityBlueprintLibrary's module is not known for sure: try the likely
 -- StaticFindObject paths, then use one global object walk as a fallback. UE4SS
@@ -125,13 +146,13 @@ function M.ascOf(pawn)
     -- Treat it as an unavailable query, not an exception in the defense tick.
     local okLib, lib = pcall(M.obj, "/Script/GameplayAbilities.Default__AbilitySystemBlueprintLibrary")
     if not okLib or lib == nil then return nil end
-    local ok, asc = pcall(function() return lib:GetAbilitySystemComponent(pawn) end)
+    local ok, asc = pcall(getasc, lib, pawn)
     if not ok then
         warnOnce("ascOf.component", "ascOf: GetAbilitySystemComponent failed (%s)", tostring(asc))
         return nil
     end
     if asc == nil then return nil end
-    local okValid, alive = pcall(function() return asc:IsValid() end)
+    local okValid, alive = pcall(isvalid, asc)
     if not okValid then
         warnOnce("ascOf.valid", "ascOf: IsValid probe failed (%s); using the wrapper", tostring(alive))
         return asc
@@ -144,7 +165,7 @@ function M.nowOf(pawn)
     if pawn == nil then return 0 end
     local okLib, statics = pcall(M.obj, "/Script/Engine.Default__GameplayStatics")
     if not okLib or statics == nil then return 0 end
-    local ok, now = pcall(function() return statics:GetTimeSeconds(pawn) end)
+    local ok, now = pcall(getclock, statics, pawn)
     if not ok then
         warnOnce("nowOf.time", "nowOf: GetTimeSeconds failed (%s); time decisions read 0", tostring(now))
         return 0
