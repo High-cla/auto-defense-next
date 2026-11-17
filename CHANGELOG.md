@@ -17,6 +17,14 @@ Versions are the `tl.VERSION` value in `Scripts/main.lua`; the release tag is `v
 - 新增四份 P0 工程文档：ARCHITECTURE（模块/启动/数据流）、DEFLECT-STATE-MACHINE（命中候选、闪避/弹反优先级与 guard 状态）、RUNTIME-LIFECYCLE（调度、Hook、暂停恢复及当前 Hook 注销缺口）和 CONFIGURATION-REFERENCE（41 项中英配置目录、类型/默认值/范围/持久化及 TXT→JSON 首次迁移）。README、UPSTREAM-API-GUIDE 与 MENU-INTEGRATION 已加入索引或同步字段数（41 项、39 项可编辑、2 项只读）。
 - 文档整理：除 `README.md`、`CHANGELOG.md` 与 `openmods.md` 外，所有 Markdown 移入 `docs/`，README/CHANGELOG/文档之间的相对链接全部改写；顺带修正了一批原本指向 UE4SS 根目录（`<Mods/pbz-auto-defense/…>`）的断链，并把指向 `.gitignore` 文件中（配置 JSON、旧 TXT、`backup/`）的链接改成代码片段。`openmods.md` 必须留在根目录：openmods 的 `$schema` 明确写「Put this file at the root of your mod repository, next to openmods.md」，商店页正文靠这条相邻约定被发现。`tools/check_docs.py` 新增相对链接校验与 openmods 配对校验：断链或 `openmods.md` 被搬走都直接失败。
 
+### Hook 注销与统一 teardown（审计 P1-4）
+
+- 每个 `RegisterHook` 站点改为接收并保存**两个** id（UE4SS 返回 `preId, postId`），连同 UFunction 路径一起存入 `tl.hookIds`（`RT.rememberHook(key, path, pre, post)`）。此前只取首个返回值，post 半边永远留在引擎里——这是审计 P1-4 的真正缺陷，涉及 stance frame / bullet / result / activation / attack / cue 六处。
+- `RT.unhook(key)` 改按上游文档形式调用 `UnregisterHook(path, preId, postId)`，本机构建拒绝该形式时回落到只带 id 的旧形式；失败只记一次日志并返回 false，不再“调过就算注销”。
+- 新增 `tl.teardown(reason)`：取消本模组自己的 delayed action（含取消不掉的 stale handle）→ 注销全部 hook → 取消 toast 动作 → flush ledger 与 event sink → 清掉迟到回调仍可能触碰的句柄 → `tl.stopped = true`。幂等；`tl.main` 在 stopped 时不做决策；看门狗判定主循环已死时调用它而不是留下半套 hook；热键 `tl.check(true)` 重新武装并记录一行日志。
+- `tl.api` 24 → 25（新增 `teardown`）；集成套件 105 → 117 断言（hook 双 id 保存、三参注销收到 path 与 post、teardown 幂等、stopped 后不决策、热键重新武装）。
+- 文档：`docs/MODULES.md` 的 Hooks 契约改写、新增 Teardown 契约；`docs/RUNTIME-LIFECYCLE.md` 的“Hook 注销缺口”改为“已实现、尚未实机验证”，并列出仍待实机确认的三点（每个站点是否都返回两个 id、三参形式是否被本机构建接受、引擎是否自动清理 hook）；`RegisterKeyBind` 没有注销入口，teardown 后热键仍在、按下只会重新武装。
+
 代码审查（调度器/查询/门禁/发布工具链）修复：
 
 - 调度器：`LoopInGameThreadWithDelay` 调用成功但返回 nil handle 时，旧代码记一行日志就 return——主循环完全没有被排程，而 `tl.loopSchedule` 还停在旧值；现在只要调用成功就算排程成功，`"failed"` 重新可达。取消旧 handle 失败时不再丢弃它，而是记入 `tl.loopStale` 并在下次启动重试（上限 8 个），避免旧循环整局空转。`tl.check(force)` 新增人工重试参数：热键走 `tl.check(true)`，会重置启动预算并清除 `tl.loopDead`，不再出现「按热键重试」却是空承诺。`alive:` 行新增 `loop <schedule>`，让调度方式可观测。

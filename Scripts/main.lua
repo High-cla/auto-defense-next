@@ -530,21 +530,33 @@ do
         return nil
     end
     -- 1.6.5 (audit P1-4): a RegisterHook id was thrown away, so a hook could never
-    -- be removed (no UnregisterHook anywhere). The id is kept per logical hook; a
-    -- nil id is legal (the return is not documented), it just cannot be removed.
+    -- be removed. UE4SS hands back TWO ids per hook (pre and post), and the
+    -- documented unregister form is UnregisterHook(path, preId, postId) - keeping
+    -- only the first id leaves the post half installed (docs/UE4SS-LUA-API-REFERENCE.md
+    -- §5.1, §8). Both ids and the path are kept per logical hook; nil is legal
+    -- (nothing is documented about the return), it just cannot be removed later.
     -- Declared here, not with the other RT helpers: they run before "tl" exists.
-    function RT.rememberHook(key, handle)
+    function RT.rememberHook(key, path, pre, post)
         local ids = tl.hookIds
         if not ids then ids = {} tl.hookIds = ids end
-        if handle ~= nil then ids[key] = handle end
-        return handle
+        if pre ~= nil or post ~= nil then
+            ids[key] = { path = path, pre = pre, post = post }
+        end
+        return pre, post
     end
     function RT.unhook(key)
         local ids = tl.hookIds
-        local handle = ids and ids[key]
-        if handle == nil then return false end
+        local h = ids and ids[key]
+        if h == nil then return false end
         ids[key] = nil
-        if pcall(UnregisterHook, handle) then return true end
+        -- the 3-arg form first (documented, removes both halves); the id-only form
+        -- is the fallback for a build that does not take a path
+        local ok
+        if type(h) == "table" and h.path ~= nil then
+            ok = pcall(UnregisterHook, h.path, h.pre, h.post)
+        end
+        if not ok then ok = pcall(UnregisterHook, type(h) == "table" and h.pre or h) end
+        if ok then return true end
         tl.err("unhook " .. tostring(key), "UnregisterHook failed")
         return false
     end
@@ -586,6 +598,7 @@ do
             if f then f:write(table.concat(buf)) f:flush() lines = lines + #buf end
             buf = {}
         end
+        tl.eventsFlush = flush -- teardown flushes what is still buffered before it stops
         -- the sink copies each event inside the callback: a ring slot is only
         -- valid there, so nothing retains it
         tl.bus.subscribe(function(e)
@@ -3036,15 +3049,15 @@ do
     local function hookStanceFrame()
         if frameHooked or os.clock() < nextHookTry then return end
         nextHookTry = os.clock() + 5
-        local ok, ret = pcall(RegisterHook, STANCE_FRAME_FN, function(...)
+        local ok, pre, post = pcall(RegisterHook, STANCE_FRAME_FN, function(...)
             local t0 = settings.perf and os.clock()
             local okH, e = pcall(onStanceFrame, ...)
             if t0 then tl.perfAdd(tl.perf.hooks, os.clock() - t0) end
             if not okH then rlog("late attack hook error: %s", tostring(e)) end
         end)
         frameHooked = ok
-        if ok then RT.rememberHook("stance frame", ret) end
-        rlog("late attack hook: %s", ok and "hooked" or ("not yet: " .. tostring(ret)))
+        if ok then RT.rememberHook("stance frame", STANCE_FRAME_FN, pre, post) end
+        rlog("late attack hook: %s", ok and "hooked" or ("not yet: " .. tostring(pre)))
     end
 
     -- timeline parry: a held guard does not stop these hits (test5: stance on,
@@ -4173,13 +4186,13 @@ tl.hookBullets = function()
         -- debug off: only SendDeflectFrame, for tl.bulletUntil (a far shot is
         -- still parried) and the tornado
         if not tl.bulletHooked[fn] and (DEBUG or i == 1) then
-            local ok, ret = pcall(RegisterHook, fn, function(ctx, ...)
+            local ok, pre, post = pcall(RegisterHook, fn, function(ctx, ...)
                 local okB, e = pcall(tl.bulletInfo, fn, ctx, ...)
                 if not okB then tl.err("bullet hook", e) end
             end)
-            if ok then tl.bulletHooked[fn] = true RT.rememberHook(fn, ret) end
+            if ok then tl.bulletHooked[fn] = true RT.rememberHook(fn, fn, pre, post) end
             if ok or activationTries == 1 or activationTries == 12 then
-                log("bullet probe %s: %s", fn:match("([%w_]+:[%w_]+)$") or fn, ok and "hooked" or tostring(ret))
+                log("bullet probe %s: %s", fn:match("([%w_]+:[%w_]+)$") or fn, ok and "hooked" or tostring(pre))
             end
         end
     end
@@ -4268,13 +4281,13 @@ tl.resultHooked = {}
 tl.hookResults = function()
     for _, e in ipairs(tl.RESULT_FNS) do
         if not tl.resultHooked[e[1]] then
-            local ok, ret = pcall(RegisterHook, e[1], function(ctx, ...)
+            local ok, pre, post = pcall(RegisterHook, e[1], function(ctx, ...)
                 local okH, er = pcall(tl[e[2]], ctx, ...)
                 if not okH then tl.err("result hook", er) end
             end)
-            if ok then tl.resultHooked[e[1]] = true RT.rememberHook(e[1], ret) end
+            if ok then tl.resultHooked[e[1]] = true RT.rememberHook(e[1], e[1], pre, post) end
             if ok or activationTries == 1 or activationTries == 12 then
-                log("result hook %s: %s", e[1]:match("([%w_ ]+:[%w_ ]+)$") or e[1], ok and "hooked" or tostring(ret))
+                log("result hook %s: %s", e[1]:match("([%w_ ]+:[%w_ ]+)$") or e[1], ok and "hooked" or tostring(pre))
             end
         end
     end
@@ -4287,15 +4300,15 @@ local function hookActivation()
     tl.try("result hook", tl.hookResults)
     for _, fn in ipairs(ACTIVATE_FNS) do
         if not activationHooked[fn] then
-            local ok, ret = pcall(RegisterHook, fn, function(ctx)
+            local ok, pre, post = pcall(RegisterHook, fn, function(ctx)
                 local t0 = settings.perf and os.clock()
                 local okH, e = pcall(onActivate, ctx)
                 if t0 then tl.perfAdd(tl.perf.hooks, os.clock() - t0) end
                 if not okH then tl.err("activation hook", e) end
             end)
-            if ok then activationHooked[fn], tl.activationHooked = true, true RT.rememberHook(fn, ret) end
+            if ok then activationHooked[fn], tl.activationHooked = true, true RT.rememberHook(fn, fn, pre, post) end
             if ok or activationTries == 1 or activationTries == 12 then
-                log("activation hook %s: %s", fn:match("([%w_]+_C:)") or fn, ok and "hooked" or tostring(ret))
+                log("activation hook %s: %s", fn:match("([%w_]+_C:)") or fn, ok and "hooked" or tostring(pre))
             end
         end
     end
@@ -4384,14 +4397,13 @@ local function hookAttacks(deflect)
         log("attack hook: class of Deflect Component unknown, retrying in 10 s")
         return
     end
-    local ok, ret = pcall(function()
-        return RegisterHook(path .. ":SendDeflectFrame", function(...)
-            local okR, e = pcall(onSendFrame, ...)
-            if not okR then log("attack hook error: %s", tostring(e)) end
-        end)
+    local hookPath = path .. ":SendDeflectFrame"
+    local ok, pre, post = pcall(RegisterHook, hookPath, function(...)
+        local okR, e = pcall(onSendFrame, ...)
+        if not okR then log("attack hook error: %s", tostring(e)) end
     end)
-    if ok then RT.rememberHook("attack", ret) end
-    log("attack hook: %s", ok and ("hooked " .. path .. ":SendDeflectFrame") or ("not hooked: " .. tostring(ret)))
+    if ok then RT.rememberHook("attack", hookPath, pre, post) end
+    log("attack hook: %s", ok and ("hooked " .. hookPath) or ("not hooked: " .. tostring(pre)))
 end
 
 -- ---------------------------------------------------------------- gameplay cues
@@ -4417,14 +4429,13 @@ end
 -- 未接线 (audit P2-1): no caller anywhere; kept for the day the cue path is fixed
 local function hookCues()
     for _, fn in ipairs(CUE_FUNCS) do
-        local ok, err = pcall(function()
-            RegisterHook(fn, function(...)
-                local okR, e = pcall(onCue, ...)
-                if not okR then log("cue hook error: %s", tostring(e)) end
-            end)
+        local ok, pre, post = pcall(RegisterHook, fn, function(...)
+            local okR, e = pcall(onCue, ...)
+            if not okR then log("cue hook error: %s", tostring(e)) end
         end)
+        if ok then RT.rememberHook("cue " .. fn, fn, pre, post) end
         log("cue hook %s: %s", fn:match(":(.+)$") .. " (" .. (fn:match("GameplayCueNotify_(%w+)") or "?") .. ")",
-            ok and "ok" or ("failed: " .. tostring(err)))
+            ok and "ok" or ("failed: " .. tostring(pre)))
     end
 end
 
@@ -4724,6 +4735,8 @@ if tl.warm then
     end)
 end
 tl.main = function(id)
+    -- after teardown nothing may decide, even if a hook or timer fires one last time
+    if tl.stopped then return false end
     if id ~= tl.loopId then return true end
     local t = os.clock()
     tl.tickAt, tl.ticks = t, tl.ticks + 1
@@ -4909,6 +4922,12 @@ end
 -- force = a human asked for it (hotkey). It restarts even after the automatic
 -- budget is spent, and resets that budget so the watchdog works again (review F3).
 tl.check = function(force)
+    if tl.stopped then
+        if not force then return end
+        -- teardown put everything down; a human asking for a restart re-arms it
+        tl.stopped, tl.loopDead = false, nil
+        log("main loop: re-armed after teardown")
+    end
     local quiet = os.clock() - tl.tickAt
     -- 1.6.5 (audit P1-1): a scheduler call that returned without throwing may still
     -- never tick. Two seconds after such a start, with no tick at all, the other
@@ -4939,8 +4958,44 @@ tl.check = function(force)
     end
     if not tl.loopDead then
         tl.loopDead = true
-        log("main loop dead after %d starts: automatic restarts stopped (a hotkey forces one more)", tl.loopId)
+        log("main loop dead after %d starts: automatic restarts stopped (a hotkey re-arms it)", tl.loopId)
+        -- 1.6.5: a loop that cannot be restarted cannot decide, so put the hooks,
+        -- the timer and the buffered sinks down instead of leaving them firing.
+        tl.teardown("main loop dead after " .. tostring(tl.loopId) .. " starts")
     end
+end
+-- One place that undoes everything the mod installed (audit P1-4). Order matters:
+-- stop scheduling first (no new tick may start while the hooks come down), then
+-- remove the hooks, then the timer, then flush what is still buffered. Idempotent;
+-- tl.check(true) re-arms the whole thing, so a dead loop is recoverable by hand.
+tl.teardown = function(reason)
+    if tl.stopped then return false end
+    tl.stopped = true
+    local why = tostring(reason or "requested")
+    local loops = 0
+    if tl.loopHandle ~= nil then
+        if tl.cancelLoop(tl.loopHandle) then loops = loops + 1 end
+        tl.loopHandle = nil
+    end
+    if tl.loopStale then
+        for i = 1, #tl.loopStale do
+            if tl.cancelLoop(tl.loopStale[i]) then loops = loops + 1 end
+        end
+        tl.loopStale = nil
+    end
+    tl.loopVerifyAt = nil
+    local hooks = RT.unhookAll()
+    local toastStopped = 0
+    if toast and pcall(toast.cancel, toast) then toastStopped = 1 end
+    if tl.ledFlush then pcall(tl.ledFlush) end
+    if tl.eventsFlush then pcall(tl.eventsFlush) end
+    -- drop the handles a late callback could still act on
+    tl.attackHooked, tl.activationHooked = false, false
+    tl.tapPending, tl.receipt = nil, nil
+    tl.busIdx = nil
+    log("teardown (%s): %d loop(s) cancelled, %d hook(s) removed, %d toast stopped",
+        why, loops, hooks, toastStopped)
+    return true
 end
 -- Configuration changes run before any input decisions, including while in menus.
 -- State with startup captures or shared guard ownership is deliberately restart-only.
@@ -5066,7 +5121,7 @@ do
     tl.api = {
         "tickReceipt", "fxScan", "fxDue", "fxClear", "pressTap", "releaseHeldKey",
         "menu", "input", "policy", "bus", "warm", "led", "ledFlush", "emit", "err", "logState",
-        "dat", "pd", "guardOwned", "pruneHandles", "VERSION", "busIdx", "api", "log",
+        "dat", "pd", "guardOwned", "pruneHandles", "VERSION", "busIdx", "api", "log", "teardown",
     }
     local fields = 0
     for _ in pairs(tl) do fields = fields + 1 end
@@ -5082,6 +5137,7 @@ end
     _G.__TL, _G.__HK, _G.__S = tl, hk, settings
     -- audit P0-3: the decision chain had no offline coverage at all
     _G.__DECIDE, _G.__CHECK_RELEASE = tl.decide, tl.checkRelease
+    _G.__TEARDOWN = tl.teardown
     _G.__RUNTIME = {
         version = _VERSION, jit = rawget(_G, "jit") and rawget(_G, "jit").version or nil,
         compat = RT.compat ~= nil,

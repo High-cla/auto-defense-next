@@ -224,7 +224,7 @@ if type(RT) == "table" then
     eq(RT.jit == nil or type(RT.jit) == "string", true, "runtime jit is a name or absent")
 end
 -- E (P1-5): the documented surface is pinned, not grown by accident
-eq(#T.api, 24, "the public surface stays at the 24 documented names")
+eq(#T.api, 25, "the public surface stays at the 25 documented names")
 eq(type(T.VERSION) == "string" and T.VERSION:match("^%d+%.%d+%.%d+$") ~= nil, true,
     "VERSION is semantic: " .. tostring(T.VERSION))
 
@@ -396,6 +396,36 @@ do
     T.tickAt, T.ticks = os.clock(), 0
     T.start()
 end
+
+-- 1.6.5 (audit P1-4): a hook keeps both ids, and one teardown removes everything
+local seenReg, seenUnreg = {}, {}
+local realReg, realUnreg = RegisterHook, UnregisterHook
+RegisterHook = function(path)
+    seenReg[#seenReg + 1] = path
+    return path .. "#pre", path .. "#post"
+end
+UnregisterHook = function(a, b, c)
+    seenUnreg[#seenUnreg + 1] = { a, b, c }
+end
+T.hookIds, T.stopped, T.bulletHooked = nil, false, {}
+T.hookBullets()
+eq(type(T.hookIds), "table", "an installed hook is remembered")
+local _, record, records = nil, nil, 0
+for _, v in pairs(T.hookIds) do record, records = v, records + 1 end
+eq(records > 0, true, "at least one hook record exists")
+eq(type(record), "table", "the record is a table, not a bare id")
+eq(record.post ~= nil, true, "the post id is kept too, not only the pre id")
+eq(type(record.path), "string", "the record keeps the UFunction path")
+eq(T.teardown("test"), true, "teardown runs once and reports success")
+eq(T.stopped, true, "a torn-down mod is marked stopped")
+eq(#seenUnreg > 0 and type(seenUnreg[1][1]) == "string", true,
+    "UnregisterHook is called with the documented path form")
+eq(#seenUnreg > 0 and seenUnreg[1][3] ~= nil, true, "the post id reaches UnregisterHook")
+eq(_G.__LOOP() == false, true, "a tick after teardown decides nothing")
+eq(T.teardown("test"), false, "a second teardown is a no-op")
+T.check(true)
+eq(T.stopped, false, "a human restart re-arms the mod after teardown")
+RegisterHook, UnregisterHook = realReg, realUnreg
 
 eq(#gaps, 0, "the whole test surface is present: " .. table.concat(gaps, ","))
 

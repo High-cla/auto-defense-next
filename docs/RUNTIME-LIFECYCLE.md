@@ -124,23 +124,28 @@ Hook 注册不应一律发生在脚本加载的最早时刻：
 
 目标 UFunction 可能尚未进入内存；注册失败应被视作“尚不可用”，由相应低频重试策略处理，而不是把 false/nil 状态永久缓存。
 
-### Critical unregistration gap / 当前 Hook 注销缺口
+### Hook unregistration / Hook 注销（已实现，尚未实机验证）
 
-当前代码存在需要修复后才能宣称完成生命周期管理的实现缺口：
+1.6.5 起每个 hook 站点都接收 `local ok, pre, post = pcall(RegisterHook, PATH, fn)`，并调用
+`RT.rememberHook(key, path, pre, post)` 把 `{ path, pre, post }` 存入 `tl.hookIds`。此前只保存首个
+返回值，post 半边永远留在引擎里——这正是审计 P1-4 的缺陷。
 
-1. main.lua 的多个 RegisterHook 调用经 pcall 捕获返回值时只接收一个返回变量，因而只保存了第一个 Hook ID；UE4SS RegisterHook 的标准返回为 PreId 和 PostId。
-2. RT.rememberHook 只保存一个 handle，没有同时保存目标 UFunction path 和另一侧 ID。
-3. RT.unhook 当前调用 UnregisterHook(handle)，而上游接口要求函数路径、PreId 和 PostId；参数不完整。
-4. 已检索到 RT.unhookAll 的定义，但没有找到运行路径调用它，也没有找到统一的 on-unload/teardown handler。
+`RT.unhook(key)` 先按上游文档形式调用 `UnregisterHook(path, preId, postId)`；该形式在本机构建被
+拒绝时回落到只带 preId 的旧形式，失败只记一次日志并返回 false（不吞错、不假装成功）。
+`RT.unhookAll()` 遍历登记表；`post` 为 nil 时按“引擎没给这一侧”处理，如实记录而不是假定存在。
 
-因此，文档记录“Hook ID 已有登记辅助函数”，但**不将当前实现描述为已具备可靠 Hook 注销能力**。在修复前，不应热重载脚本并假设旧 callback 一定被移除；更安全的验证方法是完全退出游戏/UE4SS 后再启动新脚本进程。
+`tl.teardown(reason)` 是唯一的卸载入口，顺序固定为：取消本模组自己的 delayed action（含
+`tl.loopStale` 里取消不掉的旧 handle，重试上限 8）→ `RT.unhookAll()` → 取消 toast 动作 →
+flush ledger 与 event sink → 清掉迟到的回调仍可能触碰的句柄 → `tl.stopped = true`。
+它幂等（第二次直接返回 false），`tl.main` 在 `tl.stopped` 时不做任何决策，看门狗判定“主循环
+已死”时调用它而不是留下半套 hook，热键 `tl.check(true)` 会重新武装并记录一行日志。
 
-建议修复方向（属于后续代码工作，而不是当前已完成事实）：
-- 每个 Hook 以唯一 key 保存 {functionPath, preId, postId}。
-- 正确传递 UnregisterHook(functionPath, preId, postId)。
-- 对 RegisterHook 返回 nil/单侧 ID 做明确兼容处理，不假定两侧一定都有。
-- 建立单一 teardown 流程，并保证重复调用幂等。
-- 在真实 UE4SS 环境验证注册、触发、注销后 callback 不再触发；再增加可注入的离线测试。
+仍未证实的部分（不要写成已完成）：
+- 本次构建的 `RegisterHook` 是否在**每个**站点都返回两个 id；`post` 为 nil 时的实际行为。
+- 三参 `UnregisterHook` 是否被本机 UE4SS 接受（离线测试用的是 stub，只能证明调用形状）。
+- `RegisterKeyBind` 没有注销 API：teardown 后热键仍在，按下只会重新武装模组。
+- 卸载/热重载是否会由 UE4SS 自己清理 hook（上游文档未明确）。实机验证方法仍是：注销后触发
+  目标函数，确认 callback 不再执行；在没有这份日志之前，热更仍建议整进程重启。
 
 ### UE4SS upstream references
 
@@ -182,12 +187,13 @@ tl.paused 检查：
 
 ## 9. Shutdown and safe maintenance / 停止与安全维护
 
-当前源码未提供完整统一卸载函数，且 Hook 注销 helper 如上所述存在签名缺口。因而：
+`tl.teardown(reason)` 按“阻止新工作 → 取消 owned delayed actions → 注销全部 Hook → 清 pending
+state / 输入残留 → 关闭文件句柄”的顺序执行，并且幂等。仍然：
 
-- 不宣称脚本热重载时所有 Hook、KeyBind 和临时状态都可安全清理。
-- 代码调试/热更期间，优先关闭游戏/UE4SS 进程后再替换脚本。
-- 若以后引入 teardown，应按“阻止新工作 → 增加 generation / 使回调失效 → 取消 owned delayed actions → 注销全部 Hook → 清理 pending state / input hold → 关闭文件句柄”顺序实现。
-- teardown 必须幂等；第二次执行不应重复释放或写文件。
+- 不宣称热重载可安全清理 **KeyBind**（API 没有注销入口）与所有临时状态；热更后按一次热键即可
+  重新武装，但旧绑定不会消失。
+- 三参 `UnregisterHook` 与“引擎是否自动清理 hook”都需要实机日志确认；在此之前，代码调试/热更
+  期间仍优先关闭游戏/UE4SS 进程后再替换脚本。
 - 禁止尝试取消其他 Mod 创建的 delayed-action handle 或擅自注销其他 Mod 的 Hook。
 
 ## 10. Lifecycle verification checklist / 生命周期验收表
@@ -200,7 +206,7 @@ tl.paused 检查：
 - [ ] Pawn 切换/死亡复活/地图切换：旧组件不再被使用，短暂暂停后恢复。
 - [ ] 过场/对话/输入接管：暂停防守，无过场中的 tag/输入残留。
 - [ ] Hook 目标尚未加载：重试逻辑可恢复注册，且不会每帧扫描。
-- [ ] Hook 注销测试：先修复并验证 PreId/PostId/function path 的完整注销流程。
+- [ ] Hook 注销测试（离线已覆盖调用形状）：实机确认 `UnregisterHook(path, preId, postId)` 被接受、注销后目标函数不再触发 callback、`post` 为 nil 的站点行为如实记录。
 - [ ] Toast retrigger/expire：不遗留重复显示 loop。
 - [ ] 日志和 stage error backoff 能定位问题，不发生每帧错误风暴。
 - [ ] 退出游戏再启动：没有旧进程回调影响新会话。
