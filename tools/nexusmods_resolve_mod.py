@@ -31,7 +31,8 @@ def verify_file_belongs_to_mod(files: Any, file_id: str) -> dict[str, Any]:
     ]
     if len(matches) != 1:
         raise RuntimeError(
-            f"NEXUSMODS_FILE_ID {file_id} was not found exactly once in this mod's file list."
+            f"NEXUSMODS_FILE_ID {file_id} was not found exactly once in this "
+            "mod's file list."
         )
 
     record = matches[0]
@@ -65,11 +66,15 @@ def api_get(key: str, path: str) -> dict[str, Any]:
             r"\1\2[redacted]",
             detail,
         )
-        raise RuntimeError(f"Nexus Mods API GET {path}: HTTP {exc.code}: {detail[:800]}") from None
+        raise RuntimeError(
+            f"Nexus Mods API GET {path}: HTTP {exc.code}: {detail[:800]}"
+        ) from None
     except urllib.error.URLError:
         raise RuntimeError(f"Nexus Mods API GET {path}: network error") from None
     except json.JSONDecodeError:
-        raise RuntimeError(f"Nexus Mods API GET {path}: invalid JSON response") from None
+        raise RuntimeError(
+            f"Nexus Mods API GET {path}: invalid JSON response"
+        ) from None
 
     if not isinstance(payload, dict):
         raise RuntimeError(f"Nexus Mods API GET {path}: unexpected response type.")
@@ -83,9 +88,14 @@ def main() -> int:
     if not key:
         raise RuntimeError("Missing NEXUSMODS_API_KEY Secret.")
     if not re.fullmatch(r"[0-9]+", site_id):
-        raise RuntimeError("NEXUSMODS_MOD_ID must be the numeric mod ID from the site URL.")
+        raise RuntimeError(
+            "NEXUSMODS_MOD_ID must be the numeric mod ID from the site URL."
+        )
     if not re.fullmatch(r"[0-9]+", file_id):
-        raise RuntimeError("NEXUSMODS_FILE_ID must be the numeric File ID returned by the first upload.")
+        raise RuntimeError(
+            "NEXUSMODS_FILE_ID must be the numeric File ID returned by the "
+            "first upload."
+        )
 
     mod_response = api_get(key, f"/games/{GAME}/mods/{site_id}")
     mod = mod_response.get("data")

@@ -2,8 +2,12 @@
 # UE4SS (Unreal Engine 4/5 Scripting System) exposes a set of engine-level globals to
 # every Lua mod. The game runs Lua 5.4, but selene's built-in stdlibs are lua51/lua52/lua53 only,
 # so this checks against lua51 plus the 5.4 calls and the engine globals listed below.
+#
+# Scope contract: every API name that docs/UE4SS-LUA-API-REFERENCE.md documents and the
+# scripts actually call must appear here. tools/check_std.py enforces that (offline, no network).
 base: lua51
 globals:
+  # ---- object lookup and construction notification (API ref 2.2/2.5) ----
   ExecuteInGameThread:
     any: true
   FName:
@@ -18,29 +22,82 @@ globals:
     any: true
   ForEachUObject:
     any: true
+  # (classPath, callback): the callback may return true to drop the notification.
+  NotifyOnNewObject:
+    args:
+      - type: any
+      - type: function
+  StaticConstructObject:
+    any: true
+  StaticFindObject:
+    any: true
+  # ---- delayed actions (API ref 4.2/4.3); handles are opaque engine values ----
   CancelDelayedAction:
     any: true
   EngineTickAvailable:
-    any: true
-  Key:
     any: true
   LoopInGameThreadAfterFrames:
     any: true
   LoopInGameThreadWithDelay:
     any: true
-  ModifierKey:
-    any: true
+  # (ms, fn)
+  ExecuteInGameThreadWithDelay:
+    args:
+      - type: number
+      - type: function
+  # (handle, ms, fn): re-using a handle restarts its timer, which is what debounce needs.
+  RetriggerableExecuteInGameThreadWithDelay:
+    args:
+      - type: any
+      - type: number
+      - type: function
+  # (frames, fn)
+  ExecuteInGameThreadAfterFrames:
+    args:
+      - type: number
+      - type: function
+  MakeActionHandle:
+    args: []
+  PauseDelayedAction:
+    args:
+      - type: any
+  UnpauseDelayedAction:
+    args:
+      - type: any
+  ResetDelayedActionTimer:
+    args:
+      - type: any
+  SetDelayedActionTimer:
+    args:
+      - type: any
+      - type: number
+  IsDelayedActionActive:
+    args:
+      - type: any
+  GetDelayedActionTimeRemaining:
+    args:
+      - type: any
+  ClearAllDelayedActions:
+    args: []
+  # ---- hooks (API ref 5.1) ----
   RegisterHook:
+    any: true
+  # UnregisterHook takes either (hook_id) or (pre_id, post_id), so no signature is pinned.
+  UnregisterHook:
+    any: true
+  # ---- input (API ref 7.1) ----
+  Key:
+    any: true
+  ModifierKey:
     any: true
   RegisterKeyBind:
     any: true
-  StaticConstructObject:
+  # ---- engine containers and argument wrappers (API ref 3.2/6.1/6.2) ----
+  TArray:
     any: true
-  StaticFindObject:
+  TMap:
     any: true
-  LoadAsset:
-    any: true
-  CreateInvalidObject:
+  RemoteUnrealParam:
     any: true
   UE4SS:
     any: true

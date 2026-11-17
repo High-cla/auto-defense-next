@@ -9,7 +9,9 @@ from nexusmods_check_published import decide, version_strings
 
 class VersionStringsTests(unittest.TestCase):
     def test_reads_labels_from_a_plain_list(self) -> None:
-        labels, count = version_strings([{"version": "1.6.4"}, {"version_name": "v1.6.3"}])
+        labels, count = version_strings(
+            [{"version": "1.6.4"}, {"version_name": "v1.6.3"}]
+        )
         self.assertEqual(labels, {"1.6.4", "1.6.3"})
         self.assertEqual(count, 2)
 

@@ -22,7 +22,8 @@ def main() -> int:
         # (menu_config.py migration), so the old values would never be read again.
         raise SystemExit(
             "auto_defense.txt exists without pbz-auto-defense.config.json.\n"
-            "Refusing to create a default config here: it would shadow the legacy TXT.\n"
+            "Refusing to create a default config here: it would shadow the legacy "
+            "TXT.\n"
             "Move the TXT aside, or run this script in a clean checkout."
         )
     if not CONFIG.exists():
@@ -32,7 +33,11 @@ def main() -> int:
             raise SystemExit("mod menu descriptor has no settings list")
         defaults = {}
         for setting in settings:
-            if not isinstance(setting, dict) or "key" not in setting or "default" not in setting:
+            if (
+                not isinstance(setting, dict)
+                or "key" not in setting
+                or "default" not in setting
+            ):
                 raise SystemExit("mod menu descriptor contains an invalid setting")
             defaults[setting["key"]] = setting["default"]
         CONFIG.write_text(
@@ -41,13 +46,19 @@ def main() -> int:
         )
         print(f"Created ignored default config fixture with {len(defaults)} settings.")
     else:
-        print("Keeping existing pbz-auto-defense.config.json; it will only be read by the temp-copy test.")
+        print(
+            "Keeping existing pbz-auto-defense.config.json; it will only be read "
+            "by the temp-copy test."
+        )
 
     if not LEGACY.exists():
         LEGACY.write_text("", encoding="utf-8")
         print("Created ignored empty legacy TXT fixture.")
     else:
-        print("Keeping existing auto_defense.txt; it will only be read by the temp-copy test.")
+        print(
+            "Keeping existing auto_defense.txt; it will only be read by the "
+            "temp-copy test."
+        )
     return 0
 
 

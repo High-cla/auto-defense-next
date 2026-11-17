@@ -38,7 +38,9 @@ def api(key: str, method: str, path: str, payload=None):
         with urllib.request.urlopen(req, timeout=60) as response:
             raw = response.read()
     except urllib.error.HTTPError as exc:
-        raise RuntimeError(f"{method} {path}: HTTP {exc.code}: {safe_error(exc.read())}") from None
+        raise RuntimeError(
+            f"{method} {path}: HTTP {exc.code}: {safe_error(exc.read())}"
+        ) from None
     except urllib.error.URLError:
         raise RuntimeError(f"{method} {path}: network error") from None
     return json.loads(raw) if raw else {}
@@ -59,7 +61,9 @@ def put_signed(url: str, filename: str, data: bytes, md5_b64: str):
             if response.status not in (200, 201, 204):
                 raise RuntimeError(f"Storage PUT failed: HTTP {response.status}")
     except urllib.error.HTTPError as exc:
-        raise RuntimeError(f"Storage PUT failed: HTTP {exc.code}: {safe_error(exc.read())}") from None
+        raise RuntimeError(
+            f"Storage PUT failed: HTTP {exc.code}: {safe_error(exc.read())}"
+        ) from None
     except urllib.error.URLError:
         raise RuntimeError("Storage PUT failed; presigned URL redacted") from None
 
@@ -81,7 +85,9 @@ def summary(lines):
 
 def main():
     if os.environ.get("CONFIRM_INITIAL_UPLOAD", "").lower() != "true":
-        raise RuntimeError("Set confirm_initial_upload=true to authorize the first upload.")
+        raise RuntimeError(
+            "Set confirm_initial_upload=true to authorize the first upload."
+        )
     key = os.environ.get("NEXUSMODS_API_KEY", "").strip()
     mod_id = os.environ.get("NEXUSMODS_MOD_ID", "").strip()
     candidate = os.environ.get("NEXUSMODS_FILE_ID_CANDIDATE", "").strip()
@@ -101,7 +107,9 @@ def main():
     version = match.group(1)
     data = archive_path.read_bytes()
     if not data or len(data) >= MAX_SINGLE:
-        raise RuntimeError("Single-part bootstrap requires a non-empty ZIP smaller than 100 MiB.")
+        raise RuntimeError(
+            "Single-part bootstrap requires a non-empty ZIP smaller than 100 MiB."
+        )
     with zipfile.ZipFile(archive_path) as z:
         bad = z.testzip()
         if bad:
@@ -114,26 +122,35 @@ def main():
             "pbz-auto-defense/Scripts/main.lua",
         }
         if required - names:
-            raise RuntimeError("ZIP is missing required runtime files: " + ", ".join(sorted(required - names)))
+            missing = ", ".join(sorted(required - names))
+            raise RuntimeError("ZIP is missing required runtime files: " + missing)
         forbidden = [n for n in names if any(x in n.lower() for x in
                      ("auto_defense_log", "auto_defense_ledger", "ad_events",
                       "perf_log", "hit_times", "learned_hits", ".config.json",
                       "/backup/", "/tests/", "/tools/"))]
         if forbidden:
-            raise RuntimeError("ZIP contains runtime state or development files: " + ", ".join(forbidden[:8]))
+            listed = ", ".join(forbidden[:8])
+            raise RuntimeError(
+                "ZIP contains runtime state or development files: " + listed
+            )
 
     # Resolve and validate the URL-facing, game-scoped mod ID.
     print(f"Checking Phantom Blade Zero mod {mod_id}.")
     mod = api(key, "GET", f"/games/{GAME}/mods/{mod_id}").get("data")
     if not isinstance(mod, dict) or str(mod.get("game_scoped_id", "")) != mod_id:
-        raise RuntimeError("NEXUSMODS_MOD_ID did not resolve to this Phantom Blade Zero mod.")
+        raise RuntimeError(
+            "NEXUSMODS_MOD_ID did not resolve to this Phantom Blade Zero mod."
+        )
     internal_id = str(mod.get("id", "")).strip()
     if not internal_id:
         raise RuntimeError("Get Mod response did not contain its internal ID.")
 
-    files = api(key, "GET", f"/mods/{internal_id}/files").get("data", {}).get("mod_files")
+    files_payload = api(key, "GET", f"/mods/{internal_id}/files").get("data", {})
+    files = files_payload.get("mod_files")
     if not isinstance(files, list):
-        raise RuntimeError("Get Mod Files response incomplete; refusing to risk a duplicate.")
+        raise RuntimeError(
+            "Get Mod Files response incomplete; refusing to risk a duplicate."
+        )
     candidate_record = None
     named = []
     for item in files:
@@ -144,15 +161,26 @@ def main():
         if item.get("name") == FILE_NAME:
             named.append(item)
     if candidate_record and candidate_record.get("name") != FILE_NAME:
-        raise RuntimeError("Candidate file ID exists but belongs to a different file name.")
+        raise RuntimeError(
+            "Candidate file ID exists but belongs to a different file name."
+        )
     if len(named) > 1:
-        raise RuntimeError("Multiple PBZ Auto Defense file entries found; resolve duplicates manually.")
+        raise RuntimeError(
+            "Multiple PBZ Auto Defense file entries found; resolve duplicates "
+            "manually."
+        )
     if named and candidate and str(named[0].get("id", "")) != candidate:
-        raise RuntimeError("Existing PBZ Auto Defense file ID differs from the supplied candidate ID.")
+        raise RuntimeError(
+            "Existing PBZ Auto Defense file ID differs from the supplied "
+            "candidate ID."
+        )
     if named and "versions_count" not in named[0]:
         # Absence is not zero: treating it as "no versions yet" silently creates a
         # second version of a file that may already have releases (review P1-1).
-        raise RuntimeError("Get Mod Files response has no versions_count; refusing to risk a duplicate upload.")
+        raise RuntimeError(
+            "Get Mod Files response has no versions_count; refusing to risk a "
+            "duplicate upload."
+        )
     if named and int(named[0].get("versions_count", 0) or 0) > 0:
         file_id = str(named[0]["id"])
         output({"file_id": file_id, "file_version_id": "", "already_uploaded": "true"})
@@ -168,8 +196,12 @@ def main():
     md5_b64 = base64.b64encode(digest).decode("ascii")
     filename = archive_path.name
     print(f"Creating upload session for {filename} ({len(data)} bytes).")
-    up = api(key, "POST", "/uploads",
-             {"filename": filename, "size_bytes": len(data), "md5": md5_hex}).get("data")
+    up = api(
+        key,
+        "POST",
+        "/uploads",
+        {"filename": filename, "size_bytes": len(data), "md5": md5_hex},
+    ).get("data")
     if not isinstance(up, dict) or not up.get("id") or not up.get("presigned_url"):
         raise RuntimeError("Create Upload response missing upload ID or presigned URL.")
     upload_id = str(up["id"])
@@ -194,8 +226,10 @@ def main():
         "upload_id": upload_id,
         "name": FILE_NAME,
         "version": version,
-        "description": (f"PBZ Auto Defense {version} for Phantom Blade Zero (Steam build 26367565). "
-                        "Requires UE4SS v4.0.0 or newer.")[:255],
+        "description": (
+            f"PBZ Auto Defense {version} for Phantom Blade Zero "
+            "(Steam build 26367565). Requires UE4SS v4.0.0 or newer."
+        )[:255],
         "file_category": "main",
         "primary_mod_manager_download": True,
         "allow_mod_manager_download": True,
@@ -203,19 +237,25 @@ def main():
         "update_mod_version": True,
     }
     if existing_empty_id:
-        result = api(key, "POST", f"/mod-files/{existing_empty_id}/versions", payload).get("data")
+        result = api(
+            key, "POST", f"/mod-files/{existing_empty_id}/versions", payload
+        ).get("data")
         file_id = existing_empty_id
         operation = "created first version on existing empty file entry"
     else:
-        # The OpenAPI CreateModFileRequest expects the game-scoped ID obtained from Get Mod.
+        # The OpenAPI CreateModFileRequest wants the game-scoped ID from Get Mod.
         payload["mod_id"] = str(mod["game_scoped_id"])
         result = api(key, "POST", "/mod-files", payload).get("data")
         file_id = str(result.get("id", "")) if isinstance(result, dict) else ""
         operation = "created new Main file entry"
     if not file_id:
         raise RuntimeError("Create file response did not contain a file ID.")
-    version_id = str(result.get("id", "")) if existing_empty_id and isinstance(result, dict) else ""
-    output({"file_id": file_id, "file_version_id": version_id, "already_uploaded": "false"})
+    version_id = ""
+    if existing_empty_id and isinstance(result, dict):
+        version_id = str(result.get("id", ""))
+    output(
+        {"file_id": file_id, "file_version_id": version_id, "already_uploaded": "false"}
+    )
     sha = hashlib.sha256(data).hexdigest()
     summary(["## PBZ Auto Defense first Nexus Mods upload complete",
              f"- Mod page: https://www.nexusmods.com/{GAME}/mods/{mod_id}",
@@ -223,7 +263,8 @@ def main():
              f"- File version ID: {version_id or 'not returned'}",
              f"- Operation: {operation}", f"- Archive: {filename}",
              f"- SHA-256: {sha}", "",
-             "Save the File ID above as repository variable NEXUSMODS_FILE_ID before future GitHub Releases."])
+             "Save the File ID above as repository variable NEXUSMODS_FILE_ID "
+             "before future GitHub Releases."])
     print(f"First upload complete. File ID: {file_id}")
     return 0
 

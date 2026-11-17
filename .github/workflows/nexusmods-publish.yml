@@ -1,6 +1,11 @@
 name: Nexus Mods publish
 
 on:
+  # Verification only: a push to main runs the validate job below and nothing
+  # else. Uploads stay pinned to workflow_dispatch and release, see the `if:`
+  # guards on initial-upload and publish-update.
+  push:
+    branches: [main]
   pull_request:
     paths:
       - '.github/workflows/nexusmods-publish.yml'
@@ -9,7 +14,8 @@ on:
       - 'ue4ss.yml'
       - 'Scripts/**'
       - 'data/**'
-      - 'CHANGELOG.md'
+      - 'docs/**'
+      - '*.md'
       - 'enabled.txt'
       - 'pbz-auto-defense.modsmenu.json'
   # One-time bootstrap. The checkbox must be explicitly enabled by a maintainer.
@@ -277,8 +283,10 @@ jobs:
             echo "- Archive: $ARCHIVE"
           } >> "$GITHUB_STEP_SUMMARY"
 
+  # Pull requests and pushes to main share this offline gate. Neither event can
+  # reach the two jobs above, so a push never uploads or publishes anything.
   validate-pr:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -287,10 +295,11 @@ jobs:
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
-      - name: Install LuaJIT
+      - name: Install LuaJIT and Lua 5.4
         run: |
           sudo apt-get update
-          sudo apt-get install -y luajit
+          sudo apt-get install -y luajit lua5.4
+          lua5.4 -v
 
       - name: Install selene
         run: |
@@ -304,7 +313,13 @@ jobs:
         run: |
           python -m py_compile tools/package.py tools/nexusmods_bootstrap.py tools/nexusmods_resolve_mod.py \
             tools/nexusmods_check_published.py tools/test_nexusmods_resolve_mod.py \
-            tools/test_nexusmods_check_published.py tools/ci_prepare_test_fixtures.py
+            tools/test_nexusmods_check_published.py tools/ci_prepare_test_fixtures.py \
+            tools/check_std.py tools/test_check_std.py tools/check_docs.py tools/test_check_docs.py
+      - name: Lint the Python tooling
+        run: |
+          python -m pip install ruff
+          ruff --version
+          ruff check --select E,F tools/
       - name: Validate menu descriptor JSON
         run: python -m json.tool pbz-auto-defense.modsmenu.json > /dev/null
       - name: Test Nexus mod/file identity guard
@@ -316,6 +331,7 @@ jobs:
       - name: Run project offline test gate
         env:
           AD_REQUIRE_SELENE: "1"
+          AD_REQUIRE_LUA54: "1"
         run: bash tools/run_all.sh
       - name: Build and inspect release ZIP
         run: |
