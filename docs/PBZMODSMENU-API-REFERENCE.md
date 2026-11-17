@@ -3,7 +3,7 @@
 写给**接入菜单的模组作者**。内容由菜单自带的作者文档（Mods Menu 0.9.8 的 `api/ExampleMod-FOR-MOD-AUTHORS.md` 与 `api/ExampleMod-README.md`）整理而来，并逐条对照本机实现
 `ProjectPBZ/Content/JavaScript/PBZModsMenu/Mods/PBZModsMenu/main.js` 核对过行号。上游原始文档随菜单下载分发，不在本仓库里。
 
-> 本文描述的是**菜单的契约**，不是本模组的实现。本模组如何对齐这些契约，见 [MENU-INTEGRATION.md](../MENU-INTEGRATION.md) 与 `Scripts/ad_menu_bridge.lua`。
+> 本文描述的是**菜单的契约**，不是本模组的实现。本模组如何对齐这些契约，见 [MENU-INTEGRATION.md](MENU-INTEGRATION.md) 与 `Scripts/ad_menu_bridge.lua`。
 
 ## 1. 菜单做什么、不做什么
 

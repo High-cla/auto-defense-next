@@ -8,8 +8,8 @@
 
 ## 配置与迁移
 
-- 唯一配置源：[pbz-auto-defense.config.json](<Mods/pbz-auto-defense/pbz-auto-defense.config.json>)；菜单描述：[pbz-auto-defense.modsmenu.json](<Mods/pbz-auto-defense/pbz-auto-defense.modsmenu.json>)。
-- 首次缺 JSON 时，将原有 [auto_defense.txt](<Mods/pbz-auto-defense/auto_defense.txt>) 导入，之后不再同步写 TXT；已有 JSON 不覆盖。TXT 留作回滚。
+- 唯一配置源：`pbz-auto-defense.config.json`；菜单描述：[pbz-auto-defense.modsmenu.json](../pbz-auto-defense.modsmenu.json)。
+- 首次缺 JSON 时，将原有 `auto_defense.txt` 导入，之后不再同步写 TXT；已有 JSON 不覆盖。TXT 留作回滚。
 - **默认参数（1.6.4 起）**：`pbz-auto-defense.config.json`、描述符每行 `default`、`Scripts/main.lua` 的 `settings` 初值三处取同一组值——本版实机调过的设置：perfect=false、perfect_mode=give、dodge=red、parry=true、parry_method=key、parry_reach=0.5、guard_release_after=0.5、guard_release_combat_end=0.5、parry_lead=auto（manual 0.08）、dodge_lead_ms=80、dodge_gap_ms=120、dodge_iframe_ms=260、min_gap_ms=120、grab_lead_ms=240、receipt=false、dodge_cd=false、busy_skip=false、learn=true、data=true、pbzpd=auto，热键 F7/F8/F9/F6。三处不一致时以 JSON 为准，但新装/重置应得到同一套。
 - 40 个 JSON 字段与描述符逐项对应，38 个菜单可编辑，2 个自由文本只读。原生菜单没有任意字符串编辑器，不能声称全部字段都能在菜单输入文本。
 - `parry_lead` 分成 auto/manual 模式；手动值在 `parry_lead_seconds`。其余 `*_ms` 在 JSON/菜单用毫秒，内部转换为秒。
@@ -81,7 +81,7 @@ AD 自己的热键写入先生成临时文件，比对读取时的原文，再�
 
 现场故障（2026-11-16 三次复现，`Saved/PBZModsMenu-log.txt` 每次一行 `ue4ss/pbz-auto-defense: settings not saved`）：菜单用 `encodeName` 把模组名编码成 `pbz%2dauto%2ddefense`，再写 `Mods/PBZModsMenuBridge/pending-<enc>.json`；但本机落盘的文件名是 `pending-pbz2dauto2ddefense.json`——`%` 字节整个消失。Bridge 只认带 `%` 的那个名字（`PBZModsMenuBridge/Scripts/main.lua:257`），于是永不匹配：config 不写、`saved-<enc>.txt` 不生成，菜单按 8×250 ms 重试后判定未保存（`Mods/PBZModsMenu/main.js:76,1514`）。
 
-- 新模块 [Scripts/ad_menu_bridge.lua](<Mods/pbz-auto-defense/Scripts/ad_menu_bridge.lua>) 只做名字归一，不复制 Bridge 的校验/替换逻辑：把完整的 `pending-<loose>.json`（`loose` = 去掉所有 `%` 的拼写）逐字节镜像成 `pending-<exact>.json` 交给 Bridge；把 Bridge 写出的 `saved-<exact>.txt` 复制成 `saved-<loose>.txt` 供菜单回读；`events-<loose>.txt` 作为 `menu_config` 的第二事件源。
+- 新模块 [Scripts/ad_menu_bridge.lua](../Scripts/ad_menu_bridge.lua) 只做名字归一，不复制 Bridge 的校验/替换逻辑：把完整的 `pending-<loose>.json`（`loose` = 去掉所有 `%` 的拼写）逐字节镜像成 `pending-<exact>.json` 交给 Bridge；把 Bridge 写出的 `saved-<exact>.txt` 复制成 `saved-<loose>.txt` 供菜单回读；`events-<loose>.txt` 作为 `menu_config` 的第二事件源。
 - 镜像条件：文本以 CRLF 结尾、`pending-<exact>.json` 不存在（不覆盖 Bridge 尚未取走的文件）、写后回读逐字节一致才删掉 loose。任一步失败保留 loose 并计数，同一原因只记一行日志。
 - 节流 0.5 s（Bridge 自身每 250 ms 扫一次目录）；名字里没有 `%` 的模组（如 `BossAI`）自动 no-op。`MOD_DIR` 形如 `<mod>\Scripts\..\` 时先折叠 `.`/`..` 再取末段，否则名字会算成 `..`。
 - 不改菜单、不改 Bridge、不自己写 config JSON：Bridge 仍是唯一的配置写入者。
@@ -91,9 +91,9 @@ AD 自己的热键写入先生成临时文件，比对读取时的原文，再�
 
 `PBZModsMenu UI → 既有 Bridge → AD JSON → menu_config 校验/迁移/生效边界 → Lua 防守循环`
 
-- [Scripts/main.lua](<Mods/pbz-auto-defense/Scripts/main.lua>)：保持游戏 API、命中预测、防守输入、已有主循环。
-- [Scripts/menu_config.lua](<Mods/pbz-auto-defense/Scripts/menu_config.lua>)：统一配置边界、字段单位转换、待重启配置与运行配置分离、热键合并、恢复策略。
-- [Scripts/ad_json.lua](<Mods/pbz-auto-defense/Scripts/ad_json.lua>)：限定平面 JSON 编解码；无其他模组 Lua 库依赖。
+- [Scripts/main.lua](../Scripts/main.lua)：保持游戏 API、命中预测、防守输入、已有主循环。
+- [Scripts/menu_config.lua](../Scripts/menu_config.lua)：统一配置边界、字段单位转换、待重启配置与运行配置分离、热键合并、恢复策略。
+- [Scripts/ad_json.lua](../Scripts/ad_json.lua)：限定平面 JSON 编解码；无其他模组 Lua 库依赖。
 - 描述符：仅声明 UI，不夹带游戏决策；Bridge 不负责防守。
 
 | 候选 | 收益 | 代价/结论 |
@@ -108,7 +108,7 @@ AD 自己的热键写入先生成临时文件，比对读取时的原文，再�
 
 ## 验证证据与现场验收
 
-离线验证（1.6.4）：`bash tools/run_all.sh` 六套共 327 条断言全绿——POLICY 35 / ASYNC 46 / TIMELINE 18 / MENU 69 / BRIDGE 115 / INTEGRATION 44，`selene` 0 errors。其中 [tools/test_menu_bridge.lua](<Mods/pbz-auto-defense/tools/test_menu_bridge.lua>) 115 条覆盖 256 字节 encode 往返、镜像与删除、半写不镜像、exact 已存在不覆盖、写失败去重与 remove 失败计数、并发新保存不被吞、0.5 s 节流、无 `%` 名字 no-op、`Scripts\..\` 折叠与分隔符风格；[tools/test_integration.lua](<Mods/pbz-auto-defense/tools/test_integration.lua>) 44 条在隔离临时目录装载整个主脚本（含垫片安装路径）。测试使用 UE4SS 桩，不等于 UE4SS 游戏运行或 GUI 验证。
+离线验证（1.6.4）：`bash tools/run_all.sh` 六套共 327 条断言全绿——POLICY 35 / ASYNC 46 / TIMELINE 18 / MENU 69 / BRIDGE 115 / INTEGRATION 44，`selene` 0 errors。其中 [tools/test_menu_bridge.lua](../tools/test_menu_bridge.lua) 115 条覆盖 256 字节 encode 往返、镜像与删除、半写不镜像、exact 已存在不覆盖、写失败去重与 remove 失败计数、并发新保存不被吞、0.5 s 节流、无 `%` 名字 no-op、`Scripts\..\` 折叠与分隔符风格；[tools/test_integration.lua](../tools/test_integration.lua) 44 条在隔离临时目录装载整个主脚本（含垫片安装路径）。测试使用 UE4SS 桩，不等于 UE4SS 游戏运行或 GUI 验证。
 
 测试调试过程中曾在实装目录运行离线加载并生成初始 JSON；该次日志是桩化加载记录，**不可视作实战证据**。随后给集成测试加入专用测试目录标记，最终在隔离副本通过。原 TXT 的 SHA-256 与备份一致，旧用户配置未丢。
 
@@ -123,6 +123,6 @@ AD 自己的热键写入先生成临时文件，比对读取时的原文，再�
 
 ## 回滚与更新
 
-精确改前备份：[Scripts/main.lua.bak-before-menu-1.6.0](<Mods/pbz-auto-defense/Scripts/main.lua.bak-before-menu-1.6.0>)、[auto_defense.txt.bak-before-menu-1.6.0](<Mods/pbz-auto-defense/auto_defense.txt.bak-before-menu-1.6.0>)。关闭游戏后恢复它们，可回到本轮接入前的 Lua/TXT；JSON 和描述符可移出 AD 目录以隐藏本轮菜单配置。不要覆盖其他模组或重新打包菜单/加载器文件。
+精确改前备份：`backup/main.lua.bak-before-menu-1.6.0`、`backup/auto_defense.txt.bak-before-menu-1.6.0`。关闭游戏后恢复它们，可回到本轮接入前的 Lua/TXT；JSON 和描述符可移出 AD 目录以隐藏本轮菜单配置。不要覆盖其他模组或重新打包菜单/加载器文件。
 
 发布时只打包自己的代码、描述符和文档；不要把本机生成的用户 JSON 当默认文件随更新覆盖，也不要打包运行日志/备份/测试临时目录。

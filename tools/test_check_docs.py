@@ -41,7 +41,8 @@ class DocCheck(unittest.TestCase):
         (self.root / "Scripts/menu_config.lua").write_text(
             "a\nb\nc\nd\n", encoding="utf-8"
         )
-        (self.root / "MODULES.md").write_text(MODULES, encoding="utf-8")
+        (self.root / "docs").mkdir()
+        (self.root / "docs/MODULES.md").write_text(MODULES, encoding="utf-8")
         (self.root / "README.md").write_text(README, encoding="utf-8")
         (self.root / "pbz-auto-defense.modsmenu.json").write_text(
             '{"version": "1.6.5"}', encoding="utf-8"
@@ -77,7 +78,7 @@ class DocCheck(unittest.TestCase):
         self.assertTrue(any("version strings disagree" in b for b in bad), bad)
 
     def test_api_claim_drift_is_named(self):
-        (self.root / "MODULES.md").write_text(
+        (self.root / "docs/MODULES.md").write_text(
             MODULES.replace("the 2 names", "the 5 names"), encoding="utf-8"
         )
         bad = self.mod.check(self.root)
@@ -96,6 +97,24 @@ class DocCheck(unittest.TestCase):
         )
         bad = self.mod.check(self.root)
         self.assertTrue(any("module count" in b for b in bad), bad)
+
+    def test_broken_relative_link_is_named(self):
+        (self.root / "docs/EXTRA.md").write_text(
+            "see [main](../Scripts/missing.lua) and [ok](../Scripts/main.lua)\n",
+            encoding="utf-8",
+        )
+        bad = self.mod.check(self.root)
+        self.assertTrue(
+            any("docs/EXTRA.md links to a path" in b for b in bad), bad
+        )
+        self.assertFalse(any("Scripts/main.lua" in b and "EXTRA" in b for b in bad), bad)
+
+    def test_external_and_anchor_links_are_ignored(self):
+        (self.root / "docs/EXTRA.md").write_text(
+            "see [up](https://example.com/x) and [toc](#top) and [mail](mailto:a@b)\n",
+            encoding="utf-8",
+        )
+        self.assertEqual(self.mod.check(self.root), [])
 
     def test_api_count_reads_the_block_not_the_log(self):
         src = 'tl.api = { "a", "b", "c" }\nlog("tl api: %d", #tl.api)'

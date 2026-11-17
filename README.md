@@ -40,7 +40,7 @@
 | `events` | on | 事件日志 `ad_events.txt` |
 | `ledger` | on | 决策账本 `auto_defense_ledger.txt` |
 
-完整字段与重启/只读限制见 [MENU-INTEGRATION.md](MENU-INTEGRATION.md)。
+完整字段与重启/只读限制见 [MENU-INTEGRATION.md](docs/MENU-INTEGRATION.md)。
 
 ## 架构
 
@@ -96,12 +96,12 @@ git commit                   # pre-commit 自动跑同一道门禁
 
 ## 文档
 
-- [MODULES.md](MODULES.md)：模块表、意图→规则表、`tl.api` / `tl.prunable` 契约、未搬项
-- [ASYNC-OBSERVABILITY.md](ASYNC-OBSERVABILITY.md)：事件环契约、事件表、sink 格式、perf 与错误通道
-- [MENU-INTEGRATION.md](MENU-INTEGRATION.md)：菜单字段、重启项、只读项、集成链
-- [AUDIT-2026-11-16.md](AUDIT-2026-11-16.md)：P0–P2 审计项的处置与延后理由
-- [AUDIT-2026-11-17.md](AUDIT-2026-11-17.md)：对照 API 文档的代码质量审计（P0×4/P1×9/P2×8）与本轮处置
-- [UPSTREAM-API-GUIDE.md](UPSTREAM-API-GUIDE.md)：UE4SS Lua API、PBZModLoader 反射 SDK、PBZ USMAP 工具链及本模组的 API 优化记录
+- [MODULES.md](docs/MODULES.md)：模块表、意图→规则表、`tl.api` / `tl.prunable` 契约、未搬项
+- [ASYNC-OBSERVABILITY.md](docs/ASYNC-OBSERVABILITY.md)：事件环契约、事件表、sink 格式、perf 与错误通道
+- [MENU-INTEGRATION.md](docs/MENU-INTEGRATION.md)：菜单字段、重启项、只读项、集成链
+- [AUDIT-2026-11-16.md](docs/AUDIT-2026-11-16.md)：P0–P2 审计项的处置与延后理由
+- [AUDIT-2026-11-17.md](docs/AUDIT-2026-11-17.md)：对照 API 文档的代码质量审计（P0×4/P1×9/P2×8）与本轮处置
+- [UPSTREAM-API-GUIDE.md](docs/UPSTREAM-API-GUIDE.md)：UE4SS Lua API、PBZModLoader 反射 SDK、PBZ USMAP 工具链及本模组的 API 优化记录
 - [docs/UE4SS-LUA-API-REFERENCE.md](docs/UE4SS-LUA-API-REFERENCE.md)：UE4SS Lua 对象、线程、Hook、定时器、容器和性能 API 实战参考
 - [docs/PBZ-GAME-API-REFERENCE.md](docs/PBZ-GAME-API-REFERENCE.md)：PBZ DeflectComponent、AbilityInputComponent、Enhanced Input 与 SDK 验证等级
 - [docs/PBZ-USMAP-TOOLCHAIN.md](docs/PBZ-USMAP-TOOLCHAIN.md)：PBZ USMAP live/offline 采集、映射格式、合并和质量检查
@@ -111,7 +111,7 @@ git commit                   # pre-commit 自动跑同一道门禁
 
 ## Nexus Mods 发布
 
-首次上传与 GitHub Actions 自动发布配置见 [NEXUSMODS-PUBLISHING.md](NEXUSMODS-PUBLISHING.md)。
+首次上传与 GitHub Actions 自动发布配置见 [NEXUSMODS-PUBLISHING.md](docs/NEXUSMODS-PUBLISHING.md)。
 
 ## License
 
@@ -171,7 +171,7 @@ Recommended: download the latest package from the [GitHub Releases page](https:/
 | `events` | on | Write the event log |
 | `ledger` | on | Write the defense decision ledger |
 
-Some settings are restart-only. The in-game menu and [MENU-INTEGRATION.md](MENU-INTEGRATION.md) document the available fields and their restrictions. The in-game menu is the recommended way to change settings.
+Some settings are restart-only. The in-game menu and [MENU-INTEGRATION.md](docs/MENU-INTEGRATION.md) document the available fields and their restrictions. The in-game menu is the recommended way to change settings.
 
 ## Logs and diagnostics
 
@@ -208,15 +208,15 @@ This runs the policy, async, timeline, query, menu-config, menu-bridge, and inte
 
 ## Developer documentation
 
-- [UPSTREAM-API-GUIDE.md](UPSTREAM-API-GUIDE.md): index and integration overview for all upstream API references.
+- [UPSTREAM-API-GUIDE.md](docs/UPSTREAM-API-GUIDE.md): index and integration overview for all upstream API references.
 - [docs/UE4SS-LUA-API-REFERENCE.md](docs/UE4SS-LUA-API-REFERENCE.md): UObject queries, game-thread scheduling, hooks, containers, input, lifecycle, and Lua performance practices.
 - [docs/PBZ-GAME-API-REFERENCE.md](docs/PBZ-GAME-API-REFERENCE.md): PBZ DeflectComponent, AbilityInputComponent, Enhanced Input, SDK coverage, and verification levels.
 - [docs/PBZ-USMAP-TOOLCHAIN.md](docs/PBZ-USMAP-TOOLCHAIN.md): live/offline type capture, USMAP format, merging, quality checks, and build workflow.
 - [docs/PBZ-SDK-RESOURCES.md](docs/PBZ-SDK-RESOURCES.md): PBZ Game API SDK download/setup, UE4SS C++ SDK Generator, and the distinction from USMAP mappings.
 - [docs/API-OPTIMIZATION-ROADMAP.md](docs/API-OPTIMIZATION-ROADMAP.md): implemented changes, API candidates, risk levels, A/B measurement, and in-game validation.
 - [docs/PBZMODSMENU-API-REFERENCE.md](docs/PBZMODSMENU-API-REFERENCE.md): PBZModsMenu menu API — descriptor fields, event and bridge write contract, and the pitfalls, checked against the local main.js.
-- [MODULES.md](MODULES.md): module boundaries and the public runtime surface.
-- [MENU-INTEGRATION.md](MENU-INTEGRATION.md): native menu configuration and compatibility boundaries.
+- [MODULES.md](docs/MODULES.md): module boundaries and the public runtime surface.
+- [MENU-INTEGRATION.md](docs/MENU-INTEGRATION.md): native menu configuration and compatibility boundaries.
 
 ## License
 

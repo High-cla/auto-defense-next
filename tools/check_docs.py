@@ -28,6 +28,7 @@ API_NAMES = re.compile(r"tl\.api\s*=\s*\{(.*?)\}", re.S)
 API_CLAIM = re.compile(r"tl\.api`?\s+lists\s+the\s+(\d+)\s+names", re.I)
 README_LINES = re.compile(r"主运行时\s*`Scripts/main\.lua`（约\s*([\d,]+)\s*行）")
 README_MODULES = re.compile(r"\+\s*(\d+)\s*个边界模块")
+LINK = re.compile(r"\]\(<?([^)>\s]+)>?\)")
 
 
 def lua_lines(path: Path) -> int:
@@ -48,7 +49,7 @@ def check(root: Path) -> list[str]:
     if not main_lua.is_file():
         raise SystemExit("check_docs: Scripts/main.lua not found")
 
-    modules = (root / "MODULES.md").read_text(encoding="utf-8")
+    modules = (root / "docs/MODULES.md").read_text(encoding="utf-8")
     for left, right, nleft, nright in MODULE_ROW.findall(modules):
         for name, claimed in ((left, nleft), (right, nright)):
             if not name or not claimed:
@@ -123,7 +124,23 @@ def check(root: Path) -> list[str]:
         )
         if want != got:
             bad.append(f"README module count: doc {want}, disk {got}")
+
+    # a doc moved without its links is a doc nobody can navigate
+    for md in sorted(set(root.glob("*.md")) | set((root / "docs").glob("*.md"))):
+        bad.extend(relative_links(md, root))
     return bad
+
+
+def relative_links(path: Path, root: Path) -> list[str]:
+    broken: list[str] = []
+    rel = path.relative_to(root).as_posix()
+    for target in LINK.findall(path.read_text(encoding="utf-8", errors="replace")):
+        if target.startswith(("http://", "https://", "mailto:", "#", "//")):
+            continue
+        part = target.split("#")[0].strip()
+        if part and not (path.parent / part).exists():
+            broken.append(f"{rel} links to a path that does not exist: {target}")
+    return broken
 
 
 def main(argv: list[str]) -> int:
