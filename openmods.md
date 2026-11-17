@@ -45,7 +45,7 @@ UE4SS 需要单独安装。本仓库只包含 PBZ Auto Defense 模组，不包�
 | `events` | `on` | 是否写入事件日志 |
 | `ledger` | `on` | 是否写入防御决策记录 |
 
-部分选项只能在重启游戏后生效；具体字段请参考菜单和 [MENU-INTEGRATION.md](MENU-INTEGRATION.md)。建议通过游戏内菜单修改设置。修改仅支持重启生效的选项后，不要认为其会立即生效。
+部分选项只能在重启游戏后生效；具体字段请参考菜单和 [MENU-INTEGRATION.md](docs/MENU-INTEGRATION.md)。建议通过游戏内菜单修改设置。修改仅支持重启生效的选项后，不要认为其会立即生效。
 
 ### 日志文件
 
@@ -119,7 +119,7 @@ Common settings:
 | `events` | `on` | Write the event log |
 | `ledger` | `on` | Write the defense decision ledger |
 
-Some options are restart-only; the menu and [MENU-INTEGRATION.md](MENU-INTEGRATION.md) identify those fields. The in-game menu is the recommended way to edit settings. Do not assume that a restart-only option takes effect immediately after changing it.
+Some options are restart-only; the menu and [MENU-INTEGRATION.md](docs/MENU-INTEGRATION.md) identify those fields. The in-game menu is the recommended way to edit settings. Do not assume that a restart-only option takes effect immediately after changing it.
 
 ### Logs
 

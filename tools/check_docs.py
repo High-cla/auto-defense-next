@@ -125,6 +125,13 @@ def check(root: Path) -> list[str]:
         if want != got:
             bad.append(f"README module count: doc {want}, disk {got}")
 
+    # openmods.schema.json: "Put this file at the root of your mod repository, next to openmods.md"
+    if (root / "openmods.json").is_file() and not (root / "openmods.md").is_file():
+        bad.append(
+            "openmods.json is at the root but openmods.md is not next to it "
+            "(the openmods schema requires both at the repository root)"
+        )
+
     # a doc moved without its links is a doc nobody can navigate
     for md in sorted(set(root.glob("*.md")) | set((root / "docs").glob("*.md"))):
         bad.extend(relative_links(md, root))

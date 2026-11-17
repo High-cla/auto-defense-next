@@ -77,7 +77,7 @@ The same holds for guard/shachi/movement extraction out of the single large do-b
 
 ## Release conventions
 
-- **Store docs carry no version string.** `README.md`, `docs/openmods.md` and `openmods.json`
+- **Store docs carry no version string.** `README.md`, `openmods.md` and `openmods.json`
   must not mention `vX.Y.Z`: they are edited directly on GitHub, so a version there
   would force a hand edit on every release. The version lives in exactly three places —
   `tl.VERSION` (main.lua), the descriptor's `"version"` field and `CHANGELOG.md`.

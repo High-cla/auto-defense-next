@@ -109,6 +109,13 @@ class DocCheck(unittest.TestCase):
         )
         self.assertFalse(any("Scripts/main.lua" in b and "EXTRA" in b for b in bad), bad)
 
+    def test_openmods_pair_must_stay_together(self):
+        (self.root / "openmods.json").write_text('{"openmods": 1}', encoding="utf-8")
+        bad = self.mod.check(self.root)
+        self.assertTrue(any("openmods.md is not next to it" in b for b in bad), bad)
+        (self.root / "openmods.md").write_text("# mod page\n", encoding="utf-8")
+        self.assertEqual(self.mod.check(self.root), [])
+
     def test_external_and_anchor_links_are_ignored(self):
         (self.root / "docs/EXTRA.md").write_text(
             "see [up](https://example.com/x) and [toc](#top) and [mail](mailto:a@b)\n",
