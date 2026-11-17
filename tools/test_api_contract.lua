@@ -31,32 +31,25 @@ for p in sig:gmatch("[^,]+") do
 end
 eq(params[1], "ctx", "the first parameter is the hook's RemoteUnrealParam context")
 local SDK_ORDER = { [1] = "action", [6] = "strength", [7] = "direction", [10] = "isDodge", [11] = "counter" }
--- Two arguments are named because the debug probe reads them: the SDK declares
--- Bullet and AttackRotation by position only, never their runtime type, so the
--- shapes are logged instead of assumed. Their position is still the contract.
-local NAMED = { [2] = "bullet", [3] = "rotation" }
 for i = 1, 11 do
     local p = params[i + 1]
     eq(p ~= nil, true, "SendDeflectFrame parameter " .. i .. " exists")
     if SDK_ORDER[i] then
         eq(p, SDK_ORDER[i], "parameter " .. i .. " keeps its SDK position")
-    elseif NAMED[i] then
-        eq(p, NAMED[i], "parameter " .. i .. " names the argument the probe reads")
     else
-        eq(p == "_", true, "parameter " .. i .. " is an unused placeholder, as declared")
+        -- Bullet, AttackRotation and the three numbers the mod never reads are
+        -- received and unused; an underscore prefix says so and keeps the linter
+        -- quiet without changing the hook's shape
+        eq(p:sub(1, 1) == "_", true, "parameter " .. i .. " is an unused placeholder")
     end
 end
 eq(params[13], nil, "SendDeflectFrame has 11 parameters, so nothing follows the last")
-eq(src:find("if DEBUG then tl.probeSend(bullet, rotation) end", 1, true) ~= nil, true,
-    "the probe reads the two named arguments and nothing else")
-eq(src:find("tl.probeSend = function(bullet, rotation)", 1, true) ~= nil, true,
-    "the probe itself takes the same two arguments")
--- above the owner gate on purpose: behind it, a whole session printed no SENDARGS
--- line at all (2026-11-18 log), which looks exactly like "the hook never fires"
-local atProbe = src:find("if DEBUG then tl.probeSend(bullet, rotation) end", 1, true)
-local atGate = src:find("return -- our own", 1, true)
-eq(atProbe ~= nil and atGate ~= nil and atProbe < atGate, true,
-    "the send probe runs before the own-component gate")
+-- the instrumentation is gone on purpose: it answered its question in two sessions
+-- (SDK-API-COVERAGE 7.1-7.3) and a probe that outlives its question is just cost
+for _, gone in ipairs({ "SENDARGS", "tl.probeSend", "tl.sendProbe", "tl.tmrProbe",
+    "tl.tmrAction", "ACTN %s", "deflect hold:" }) do
+    eq(src:find(gone, 1, true), nil, "the probe is gone: " .. gone)
+end
 
 -- 2. the bullet-type table matches EDeflectBulletType 0..5
 local body = src:match('tl%.BULLET_TYPES%s*=%s*{(.-)}')

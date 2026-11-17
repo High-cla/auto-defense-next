@@ -90,6 +90,10 @@
 
 ## 7. 三条建议已落地（只读优先，待实机确认）
 
+> **2026-11-18 更新：三条探针已移除。** 它们只在 1.6.4 的两个实机会话里存在过，回答完自己的问题后
+> 按用户要求退役（读数见 §7.1–§7.3，结论与仍未证实项见 §7.4）。下面表格与读数保留为**证据记录**，
+> 描述的实现已不在代码里；`tools/test_api_contract.lua` 现在反过来断言这些日志与符号**不得**再出现。
+
 | # | 实现 | 代码位置 | 判据 / 仍需实机确认的部分 |
 |---|---|---|---|
 | 1 | 帧时间真值探针：DEBUG 下每个招式类读一次 `SendFrameTimes` / `PreHitPointDuration`，与 `hit_times.txt`+`ad_data.lua` 的时间线逐项相减，输出 `TMR … -> same clock / constant offset / count differs / differs` | `Scripts/main.lua` 的 `tl.tmrNums/tmrProbe`，由帧扫描（`tl.probeFrames`）在源招式首次出现时调用 | 单位（动作秒 vs 帧号）仍未证实：`constant offset` 才说明两套时钟可换算，`differs` 说明不能直接替换学习表 |
@@ -146,4 +150,29 @@ GetEffectiveBulletData();  $Static.GetTimes(Array, ElapsedTime, Next, End, $Ref<
 并沿 Outer 链找第一个等于 timeline 键的外层类，把该 action 的时间数组与 `hit_times.txt` 逐项比较，
 判词与 `TMR` 相同。动作发送期间数组才填值，所以每局最多 8 个 action 会在首帧到达 0.6 s 后二次读取。
 这一条真正要回答的问题是：**`hit_times.txt` 能否退役**（若 `same clock`/`constant offset` 成立即可）。
+
+### 7.4 探针退役（2026-11-18）：留下了什么、还缺什么
+
+**移除的代码**（一次性、只读、已答完问题）：`tl.tmrNums/tmrJoin/tmrVerdict/tmrField/tmrYawOf/tmrKey/tmrAction`、
+`tl.sendProbe/tl.probeSend`、`tl.probeFrames` 里的源招式首见调用与 0.6 s 二次读取、`holdAsk` 的
+`deflect hold:` 调试行与 `holdAnswers/holdLogAt`、`onSendFrame` 的探针行与 `sendProbe.own/enemy` 计数、
+5 s `metrics:` 行的 `send=` 字段。契约测试 `tools/test_api_contract.lua` 改为负断言：这七个字符串不得再出现。
+
+**保留下来的功能**：游戏自己的 hold 答案（`Scripts/ad_inputstate.lua` + `tl.holdAsk`）。它仍是**只读优化**：
+每次提问读一次 `SGameInput.IsHolding(IA_Deflect)`，答不上来就用键判；不同之处是现在会**自动回退**——
+连续 3 次「API 不可用」类故障（无 input component、无 `SGameInput`、`IsHolding` 抛错、返回非布尔）或
+一次 `o:disable(why)` 后永久回到键判，之后连读都不再读；`tl.installInputState()` 幂等，加载失败只尝试一次。
+
+**已证实的**：
+- `SGameInput.IsHolding(IA_Deflect)` 在实机可读、返回布尔；未按住时 `GetHoldTime` = `-1`；1450/1450 次提问都拿到游戏答案。
+- `SendDeflectFrame` 的第 2 参数 `Bullet` 是对象 userdata（`:GetClass()` 读到具体 `BP_Bullet_*` 类）。
+
+**仍未证实的**（探针退役后需要重新加埋点才能取）：
+1. **`IsHolding` 是否把本模组注入算作按住**——需要一次**注入窗口内**的采样（旧探针在窗口外提问，答案必然是 `false`）。
+2. **`SendFrameTimes` 的单位**（动作秒 vs 帧号）与能否与 `hit_times.txt` 对齐——`ACTN` 行从未取到过读数。
+3. **`AttackRotation.Yaw` 的可用性**——三个样本全是弹丸类、四次读法都是 `0.00`，方向要从 `DeflectSendFrame.AttackDirection` 取。
+
+> 重新取证的代价很低：需要时在 `onSendFrame` 第一行加一行 type 打印、或在 `holdAsk` 注入窗口内打一行，
+> 都不改决策路径。**不要**为此重新引入常驻探针——上一轮的教训是「探针会沉默」：没调用、被门挡住、
+> 答案一致三种沉默必须能被日志区分开，否则读数比没有读数更误导。
 

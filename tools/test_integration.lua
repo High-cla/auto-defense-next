@@ -230,7 +230,7 @@ if type(RT) == "table" then
     eq(RT.jit == nil or type(RT.jit) == "string", true, "runtime jit is a name or absent")
 end
 -- E (P1-5): the documented surface is pinned, not grown by accident
-eq(#T.api, 26, "the public surface stays at the 26 documented names")
+eq(#T.api, 27, "the public surface stays at the 27 documented names")
 eq(type(T.VERSION) == "string" and T.VERSION:match("^%d+%.%d+%.%d+$") ~= nil, true,
     "VERSION is semantic: " .. tostring(T.VERSION))
 
@@ -269,39 +269,36 @@ do
     T.inputState, StaticFindObject = realIS, realStatic
 end
 
--- B (SDK 0.3.3): the frame-times comparison. The game's own SendFrameTimes are read
--- in debug only, so what the offline gate can pin is the judgement itself: what
--- "the same clock" means and what it refuses to call a match.
+-- B: the hold source reverts. The game's own answer is a borrowed fact: when it
+-- stops being usable the adapter must go away on its own, keep its hands off the
+-- game, and leave the key state in charge - and installing it twice must not
+-- replace the instance that is already counting.
 do
-    eq(type(T.tmrVerdict), "function", "the frame-time comparison is a seam")
-    local verdict, max = T.tmrVerdict({ 0.5, 1.0, 1.5 }, { 0.5, 1.0, 1.5 })
-    eq(verdict, "same clock", "identical timelines are the same clock")
-    eq(max, 0, "identical timelines have no delta")
-    verdict = T.tmrVerdict({ 0.8, 1.3, 1.8 }, { 0.5, 1.0, 1.5 })
-    eq(verdict, "constant offset", "a constant shift is one clock with an offset")
-    verdict = T.tmrVerdict({ 0.5, 1.4 }, { 0.5, 1.0 })
-    eq(verdict, "differs", "a growing delta is not the same timeline")
-    verdict = T.tmrVerdict({ 0.5, 1.0 }, { 0.5 })
-    eq(verdict, "count differs", "a different hit count is reported, not averaged")
-    verdict = T.tmrVerdict({}, { 0.5 })
-    eq(verdict, "frames unreadable", "an unreadable array is not 'no hits'")
-    verdict = T.tmrVerdict({ 0.5 }, {})
-    eq(verdict, "not in the timeline", "an ability outside hit_times.txt is named")
-    eq(T.tmrJoin({ 0.5, 1.25 }), "0.500 1.250", "the log format is fixed")
-    eq(#T.tmrNums({ 0.25, 0.5 }), 2, "a plain array is read as numbers")
-    -- the two probe counters are what makes "no log line" distinguishable from
-    -- "never called"; a typo here would read as nil in the metrics line
-    eq(T.sendProbe.own, 0, "the own-component counter starts at zero")
-    eq(T.sendProbe.enemy, 0, "the enemy counter starts at zero")
-    -- the timing lives on the action (SDK: LGAAction_DurationBulletWithDeflectBase),
-    -- and the timeline is keyed by the ability, so the outer chain is what links them
-    eq(T.tmrKey({ "BP_Foo_C", "GA_Bar_C" }, { GA_Bar = { 0.5 } }), "GA_Bar",
-        "the first outer class the timeline knows is the key")
-    eq(T.tmrKey({ "BP_Foo_C" }, { GA_Bar = { 0.5 } }), nil, "no known outer, no key")
-    eq(T.tmrYawOf({ Yaw = 12.5 }), 12.5, "a plain rotator field is read")
-    eq(T.tmrYawOf(nil), nil, "no rotator, no yaw")
-    eq(T.tmrField({ N = 3 }, "N"), 3, "a field read that never throws")
-    eq(T.tmrField({}, "N"), nil, "a missing field reads as nil")
+    local realStatic, realIS = StaticFindObject, T.inputState
+    -- a live character on purpose: with no pawn the key path returns before the
+    -- adapter is consulted at all, so the assertion would hold even with no dead
+    -- gate in holdAsk and would prove nothing
+    StaticFindObject = function(path)
+        if type(path) == "string" and path:find("IA_Deflect", 1, true) then
+            return { IsValid = function() return true end, GetFullName = function() return path end }
+        end
+        return nil
+    end
+    local pawn = { IsValid = function() return true end, GetAddress = function() return 904 end }
+    local reads = 0
+    T.inputState = { dead = true, read = function() reads = reads + 1 return true end,
+        -- answers like a live adapter would, so a holdAsk that ignores the dead flag
+        -- fails on the value it returns instead of on a missing method
+        pick = function(held) return held end,
+        stats = function() return 0, 0, 0, 0 end }
+    eq(T.holdAsk(false, pawn), false, "a reverted adapter leaves the key answer alone")
+    eq(T.holdAsk(true, pawn), true, "a reverted adapter leaves a held key held")
+    eq(reads, 0, "a reverted adapter does not touch the game")
+    T.inputState, StaticFindObject = realIS, realStatic
+    -- installing again returns the instance that is already installed
+    local first = T.inputState
+    eq(T.installInputState(), first, "a second install keeps the live adapter")
+    eq(T.installInputState() == first, true, "install is idempotent")
 end
 
 -- A (P0-3): the decision chain's early exits. The fake Deflect Component answers

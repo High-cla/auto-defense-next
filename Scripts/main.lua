@@ -2391,181 +2391,6 @@ tl.probeLog = function(fmt, ...)
     if pr.lines <= tl.PROBE_MAX_LINES then attackLog(fmt, ...) end
     if pr.lines == tl.PROBE_MAX_LINES then attackLog("FRAME probe: %d lines, no more this session", pr.lines) end
 end
--- Frame-times probe (debug only, read only): the SDK exposes the action's own
--- deflect-frame times and its pre-hit-point duration (PBZDeflectSystem.d.ts:169-175).
--- Read once per ability class and set against the timeline the mod schedules from,
--- so the learned table can be checked against the game's own numbers instead of
--- against how the fight felt. A constant offset means the two share a clock, a
--- spread means they do not.
-tl.tmrSeen = {}
-tl.tmrJoin = function(t)
-    local p = {}
-    for i = 1, #t do p[i] = string.format("%.3f", t[i]) end
-    return table.concat(p, " ")
-end
-tl.tmrNums = function(v)
-    local out = {}
-    if v == nil then return out end
-    local okN, n = pcall(function() return #v end)
-    if not okN or type(n) ~= "number" then return out end
-    for i = 1, math.min(n, 8) do
-        local okI, x = pcall(function() return v[i] end)
-        if okI then
-            local okU, u = pcall(function() return x:get() end)
-            local num = tonumber(okU and u or x)
-            if num then out[#out + 1] = num end
-        end
-    end
-    return out
-end
--- the comparison on its own, so the verdict can be tested without a game action
-tl.tmrVerdict = function(frames, data)
-    local n = math.min(#frames, #data)
-    local max, lo, hi = 0, nil, nil
-    for i = 1, n do
-        local d = frames[i] - data[i]
-        if math.abs(d) > max then max = math.abs(d) end
-        if not lo or d < lo then lo = d end
-        if not hi or d > hi then hi = d end
-    end
-    local spread = n > 0 and (hi - lo) or 0
-    local verdict
-    if #frames == 0 then verdict = "frames unreadable"
-    elseif #data == 0 then verdict = "not in the timeline"
-    elseif n < #frames or n < #data then verdict = "count differs"
-    elseif max <= 0.05 then verdict = "same clock"
-    elseif spread <= 0.05 then verdict = "constant offset"
-    else verdict = "differs" end
-    return verdict, max, spread
-end
-tl.tmrProbe = function(cls, src)
-    local okS, times = pcall(function() return src.SendFrameTimes end)
-    local frames = okS and tl.tmrNums(times) or {}
-    local pre
-    for _, f in ipairs({ "PreHitPointDuration", "RuntimePreHitPointDuration" }) do
-        local okP, v = pcall(function() return src[f] end)
-        local num = okP and tonumber(v) or nil
-        if num then pre = num break end
-    end
-    local base = RT.bname(cls) or cls
-    local hits, data = hitTimes[base], {}
-    for i = 1, math.min(#(hits or {}), 8) do
-        local h = hits[i]
-        data[#data + 1] = type(h) == "number" and h or h[1]
-    end
-    local verdict, max, spread = tl.tmrVerdict(frames, data)
-    tl.probeLog("TMR %s frames=[%s] prehit=%s timeline=[%s] delta max=%.3f spread=%.3f -> %s",
-        cls, tl.tmrJoin(frames), pre and string.format("%.3f", pre) or "?",
-        tl.tmrJoin(data), max, spread, verdict)
-end
-
--- The action, not the ability, is what carries the timing. SDK 0.3.3 declares on
--- LGAAction_DurationBulletWithDeflectBase (PBZDeflectSystem.d.ts): SendFrameTimes,
--- StartBulletTimes, EndBulletTimes (TArray<number>), PreHitPointDuration,
--- RuntimePreHitPointDuration, BulletDuration, BulletRepetitions, DeflectBulletType,
--- AttackDirection. Probing the activated GA_* ability instead returned frames=[] and
--- prehit=? for eight classes in one session: those fields are not on the ability.
-tl.tmrField = function(o, k)
-    local ok, v = pcall(function() return o[k] end)
-    return ok and v or nil
-end
-tl.tmrYawOf = function(rot)
-    if rot == nil then return nil end
-    local yaw = tonumber(tl.tmrField(rot, "Yaw"))
-    if yaw == nil then
-        local ok, u = pcall(unwrap, rot)
-        yaw = ok and tonumber(tl.tmrField(u, "Yaw")) or nil
-    end
-    return yaw
-end
--- the action is a sub-object of the ability: the first outer whose class name is a
--- timeline key is the name the learned table is stored under
-tl.tmrKey = function(names, times)
-    for i = 1, #names do
-        local raw = names[i]
-        if raw and times[raw] then return raw end
-        local base = RT.bname(raw or "")
-        if base and times[base] then return base end
-    end
-    return nil
-end
-tl.tmrAction = function(cls, src)
-    local function num(k) return tonumber(tl.tmrField(src, k)) end
-    local send = tl.tmrNums(tl.tmrField(src, "SendFrameTimes"))
-    local start = tl.tmrNums(tl.tmrField(src, "StartBulletTimes"))
-    local ended = tl.tmrNums(tl.tmrField(src, "EndBulletTimes"))
-    local names, cur = {}, src
-    for _ = 1, 8 do
-        local ok, outer = pcall(function() return cur:GetOuter() end)
-        if not ok or not valid(outer) then break end
-        local okC, c = pcall(function() return short(outer:GetClass()) end)
-        if okC and c then names[#names + 1] = c end
-        cur = outer
-    end
-    local key = tl.tmrKey(names, hitTimes)
-    local hits, data = key and hitTimes[key], {}
-    for i = 1, math.min(#(hits or {}), 8) do
-        local h = hits[i]
-        data[#data + 1] = type(h) == "number" and h or h[1]
-    end
-    local frames = #send > 0 and send or start
-    local verdict, max, spread = tl.tmrVerdict(frames, data)
-    tl.probeLog("ACTN %s send=[%s] start=[%s] end=[%s] pre=%s rpre=%s dur=%s reps=%s yaw=%s outer=%s key=%s -> %s (max %.3f spread %.3f)",
-        cls, tl.tmrJoin(send), tl.tmrJoin(start), tl.tmrJoin(ended),
-        num("PreHitPointDuration") or "?", num("RuntimePreHitPointDuration") or "?",
-        num("BulletDuration") or "?", num("BulletRepetitions") or "?",
-        tl.tmrYawOf(tl.tmrField(src, "AttackDirection")) or "?",
-        #names > 0 and table.concat(names, ">") or "-", key or "-", verdict, max, spread)
-end
-
--- SendDeflectFrame argument shapes (debug only): the SDK pins the order of the 11
--- arguments, not the runtime type of Bullet / AttackRotation, and a wrong read
--- there is silent. Types and the yaw range, a few lines per session.
-tl.sendProbe = { n = 0, lines = 0, own = 0, enemy = 0, kinds = {}, yawMin = nil, yawMax = nil, reads = {
-    function(v) return v.Yaw end,
-    function(v) return unwrap(v).Yaw end,
-    function(v) return unwrap(v)["Yaw"] end,
-    function(v) return v:get().Yaw end,
-} }
-tl.probeSend = function(bullet, rotation)
-    local sp = tl.sendProbe
-    sp.n = sp.n + 1
-    local okB, b = pcall(function() return unwrap(bullet) end)
-    b = okB and b or nil
-    local bkind = type(b)
-    if b ~= nil then
-        local okC, c = pcall(function() return b:GetClass() end)
-        if okC and c ~= nil then
-            local okS, sh = pcall(short, c)
-            bkind = bkind .. ":" .. tostring(okS and sh or "?")
-        end
-    end
-    sp.kinds[bkind] = true
-    local yaw
-    for _, read in ipairs(sp.reads) do
-        local ok, v = pcall(read, rotation)
-        if ok then
-            yaw = tonumber(v)
-            if yaw then break end
-        end
-    end
-    if yaw then
-        if not sp.yawMin or yaw < sp.yawMin then sp.yawMin = yaw end
-        if not sp.yawMax or yaw > sp.yawMax then sp.yawMax = yaw end
-    end
-    if sp.lines < 3 or sp.n % 600 == 0 then
-        sp.lines = sp.lines + 1
-        local kinds = {}
-        for k in pairs(sp.kinds) do kinds[#kinds + 1] = k end
-        local okR, r = pcall(function() return unwrap(rotation) end)
-        attackLog("SENDARGS n=%d own=%d enemy=%d bullet=%s rotation=%s yaw=%s yawrange=%s kinds=%s", sp.n,
-            sp.own or 0, sp.enemy or 0, bkind,
-            type(okR and r or rotation), yaw and string.format("%.2f", yaw) or "?",
-            sp.yawMin and string.format("%.1f..%.1f", sp.yawMin, sp.yawMax) or "-",
-            table.concat(kinds, ","))
-    end
-end
-
 tl.probeFrames = function(pawn, deflect, now)
     local pr = tl.probe
     if pr.off then return end
@@ -2599,13 +2424,9 @@ tl.probeFrames = function(pawn, deflect, now)
                         if okB and type(b) == "number" then btype = tl.BULLET_TYPES[b] or tostring(b) break end
                     end
                     by = tl.probeAttacker(src)
-                    if not tl.tmrSeen[srcName] then
-                        tl.tmrSeen[srcName] = true
-                        tl.tmrAction(srcName, src)
-                    end
                 end
                 local okT, st = pcall(function() return data.DeflectStrength.TagName:ToString() end)
-                e = { hit = known and hit or nil, first = now, src = src, cls = srcName }
+                e = { hit = known and hit or nil, first = now }
                 pr.seen[handle] = e
                 tl.probeLog("FRAME+ h=%d %s dodge=%s isHit=%s type=%s strength=%s src=%s by %s", handle,
                     known and string.format("hit at %.2f (in %+.2fs)", hit, hit - now) or "hit time not set",
@@ -2628,19 +2449,6 @@ tl.probeFrames = function(pawn, deflect, now)
             e.gone = true
             tl.probeLog("FRAME- h=%d gone at %.2f%s (seen %.2fs)", handle, now,
                 e.hit and string.format(", hit was %.2f (%+.2fs)", e.hit, e.hit - now) or ", hit time never set", now - e.first)
-        end
-    end
-    -- second look: the action fills its time arrays while it sends, so a class read
-    -- at the instant the first frame arrives can still be empty. Eight actions per
-    -- session, once each, and only after the send has had time to happen.
-    if (pr.looks or 0) < 8 then
-        for _, e in pairs(pr.seen) do
-            if e.src and not e.look2 and e.first and now - e.first > 0.6 then
-                e.look2 = true
-                pr.looks = (pr.looks or 0) + 1
-                tl.tmrAction(e.cls or "?", e.src)
-                if pr.looks >= 8 then break end
-            end
         end
     end
     -- forget long-gone handles (the game reuses numbers)
@@ -4029,39 +3837,43 @@ local deflectKeys = nil
 -- answer - no component, no field, a throwing call, or an answer this mod's own
 -- injection explains - returns nil and leaves the key state in charge, so a game
 -- update cannot stop the guard from being released.
-do
-    local function install()
-        local IS = dofile(MOD_DIR .. "Scripts/ad_inputstate.lua").new({
+-- The install is idempotent and latches its own failure: a module that cannot load
+-- once in this build will not load on the next tick either, so it is never retried
+-- and the key state stays in charge for the rest of the session.
+tl.installInputState = function()
+    if tl.inputState or tl.inputStateErr then return tl.inputState end
+    local okI, res = pcall(function()
+        return dofile(MOD_DIR .. "Scripts/ad_inputstate.lua").new({
             component = component,
             prop = Q.prop,
             isHolding = function(sgi, act) return unwrap(sgi:IsHolding(act)) end,
             holdTime = function(sgi, act) return unwrap(sgi:GetHoldTime(act)) end,
             log = log,
         })
-        tl.inputState = IS
+    end)
+    if okI and res then
+        tl.inputState = res
+    else
+        tl.inputStateErr = tostring(res)
+        log("input state unavailable: %s", tl.inputStateErr)
     end
-    local okI, errI = pcall(install)
-    if not okI then log("input state unavailable: %s", tostring(errI)) end
+    return tl.inputState
 end
+tl.installInputState()
 -- keyHeld is what the key path answered; the game's answer overrides it where it
 -- exists. The pawn is a parameter so a test can ask without a live character.
 tl.holdAsk = function(keyHeld, pawn)
     local IS = tl.inputState
-    if not IS then return keyHeld end
+    -- a reverted adapter answers nothing and must not cost a call either
+    if not IS or IS.dead then return keyHeld end
     local p = pawn or currentPawn
     if not valid(p) then return keyHeld end
-    local held, secs = IS.read(p, inputAction("IA_Deflect"))
-    if held == nil then return keyHeld end
     -- an injected press makes the action look held for TAP_HOLD: never read that
     -- back as the player holding the guard
     local injecting = tapHold ~= nil or os.clock() - (tl.injectAt or -1e9) < TAP_HOLD
-    local answer, why = IS.pick(held, keyHeld, injecting)
-    if DEBUG and (answer ~= keyHeld or (tl.holdAnswers or 0) < 3) and os.clock() >= (tl.holdLogAt or 0) then
-        tl.holdLogAt, tl.holdAnswers = os.clock() + 1, (tl.holdAnswers or 0) + 1
-        log("deflect hold: game=%s keys=%s -> %s (%s%s)", tostring(held), tostring(keyHeld),
-            tostring(answer), why, secs and string.format(", held %.2fs", secs) or "")
-    end
-    return answer
+    local held = IS.read(p, inputAction("IA_Deflect"))
+    if held == nil then return keyHeld end
+    return IS.pick(held, keyHeld, injecting)
 end
 
 deflectKeyHeld = function()
@@ -4620,19 +4432,15 @@ local function tagName(param)
     return ok and s or "?"
 end
 
-local function onSendFrame(ctx, action, bullet, rotation, _, _, strength, direction, _, _, isDodge, counter)
-    -- the probe runs first on purpose: it has to see every call, including the ones
-    -- this mod's own component makes and the ones the owner check below cuts off.
-    -- 2026-11-18 session: zero SENDARGS lines, because the probe sat behind that gate
-    if DEBUG then tl.probeSend(bullet, rotation) end
+-- Bullet and AttackRotation (SDK positions 2 and 3) are received and unused: the
+-- underscore prefix says so without pretending the hook has a different shape.
+local function onSendFrame(ctx, action, _bullet, _rotation, _, _, strength, direction, _, _, isDodge, counter)
     local comp = unwrap(ctx)
     local okO, owner = pcall(function() return comp:GetOwner() end)
     owner = okO and valid(owner) and owner or nil
     if owner and valid(currentPawn) and owner:GetAddress() == currentPawn:GetAddress() then
-        tl.sendProbe.own = (tl.sendProbe.own or 0) + 1
         return -- our own
     end
-    tl.sendProbe.enemy = (tl.sendProbe.enemy or 0) + 1
     local okA, act = pcall(function() return unwrap(action) end)
     local actName = okA and valid(act) and short(act:GetClass()) or "-"
     local okD, red = pcall(function() return unwrap(isDodge) end)
@@ -5025,9 +4833,8 @@ tl.main = function(id)
             if tl.bus and tl.bus.stats then drop = tl.bus.stats().dropped or 0 end
             local asks, known = 0, 0
             if tl.inputState then asks, known = tl.inputState.stats() end
-            local sp = tl.sendProbe
-            tl.led("metrics: drop=%d asked=%d denied=%d lua=%.0fKB hold=%d/%d send=%d/%d", drop, asked, denied,
-                collectgarbage("count"), known, asks, sp.n or 0, sp.enemy or 0)
+            tl.led("metrics: drop=%d asked=%d denied=%d lua=%.0fKB hold=%d/%d", drop, asked, denied,
+                collectgarbage("count"), known, asks)
         end
     end
     if hk.menu then guarded("menu config", hk.menu.poll, hk.menu, t) end
@@ -5410,7 +5217,7 @@ do
         "tickReceipt", "fxScan", "fxDue", "fxClear", "pressTap", "releaseHeldKey",
         "menu", "input", "policy", "bus", "warm", "led", "ledFlush", "emit", "err", "logState",
         "dat", "pd", "guardOwned", "pruneHandles", "VERSION", "busIdx", "api", "log", "teardown",
-        "holdAsk",
+        "holdAsk", "installInputState",
     }
     local fields = 0
     for _ in pairs(tl) do fields = fields + 1 end

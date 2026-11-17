@@ -98,4 +98,54 @@ ok(not pcall(IS.new, {}), "no readers: refuses to build")
 ok(not pcall(IS.new, { component = function() end }), "no IsHolding reader: refuses to build")
 ok(pcall(IS.new, { component = function() end, isHolding = function() end }), "the documented minimum builds")
 
+-- 4. the borrowed answer reverts on its own. A reflection field that stops
+-- answering must cost nothing after the first few tries, and "no pawn yet" or
+-- "the action is not registered yet" are normal early-session states, not faults.
+o = reset()
+for _ = 1, 10 do o.read(nil, action) end
+eq(o.dead, nil, "a missing pawn is transient, never a fault")
+for _ = 1, 10 do o.read(pawn, nil) end
+eq(o.dead, nil, "a missing action is transient, never a fault")
+eq(o.faults or 0, 0, "transient misses do not accumulate")
+
+o = reset({ isHolding = function() error("boom") end })
+eq(o.read(pawn, action), nil, "fault 1: no answer")
+eq(o.read(pawn, action), nil, "fault 2: no answer")
+eq(o.dead, nil, "two faults are not enough to revert")
+eq(o.read(pawn, action), nil, "fault 3: no answer")
+eq(o.dead, true, "three faults in a row revert to the key state")
+eq(o.why, "IsHolding failed", "the reason that caused the revert is kept")
+
+-- a successful answer in between proves the API is there: the streak restarts
+local calls = 0
+o = reset({ isHolding = function()
+    calls = calls + 1
+    if calls == 1 or calls == 2 or calls == 4 or calls == 5 then error("boom") end
+    return true
+end })
+o.read(pawn, action) o.read(pawn, action) eq(o.dead, nil, "two faults, still alive")
+o.read(pawn, action) eq(o.dead, nil, "a good answer clears the streak")
+o.read(pawn, action) o.read(pawn, action) eq(o.dead, nil, "two faults after the good answer")
+eq(calls, 5, "only the answered streak counts")
+
+-- once reverted, the game is not asked again and the ask is still counted
+local asked = 0
+o = reset({ isHolding = function() asked = asked + 1 error("boom") end })
+o.read(pawn, action) o.read(pawn, action) o.read(pawn, action)
+eq(asked, 3, "three answers were attempted")
+eq(o.dead, true, "reverted")
+eq(o.read(pawn, action), nil, "a reverted adapter answers nothing")
+eq(asked, 3, "a reverted adapter does not touch the game")
+eq(select(1, o.stats()), 4, "the ask is still counted after the revert")
+
+-- disabling is idempotent and announced once
+local lines = 0
+o = reset({ log = function() lines = lines + 1 end })
+eq(o:disable("manual"), true, "the first disable changes state")
+eq(o.dead, true, "manual disable reverts the adapter")
+eq(o:disable("manual"), false, "the second disable is a no-op")
+eq(lines, 1, "the revert is announced once")
+eq(o.read(pawn, action), nil, "a manually reverted adapter answers nothing")
+eq(o.why, "manual", "the revert reason is recorded")
+
 print("INPUTSTATE PASS " .. n .. " assertions")

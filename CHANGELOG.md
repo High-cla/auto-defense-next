@@ -86,6 +86,26 @@ Versions are the `tl.VERSION` value in `Scripts/main.lua`; the release tag is `v
 - 文档：`docs/SDK-API-COVERAGE.md` §4/§6/§7 从「待决定」改为「已落地，待实机确认」；`docs/MODULES.md`、`README.md`、`docs/ARCHITECTURE.md` 补模块行与计数。
 - **首次实机（2026-11-18 04:50–04:59，9 分钟 26,926 ticks）三条都还没结论，因为探针自己沉默**：帧扫描的 `SourceAction` 全是 `LGAAction_DurationBulletWithDeflect`（66/66），不是 timeline 的键，判词只能落到 `not in the timeline`；`SENDARGS` 0 行不是 hook 没触发，而是探针在「自家 component 早退」之后，整局没走到。修正：帧时间探针改在 `onActivate` 对激活的敌人招式调用（每局 ≤40 个类）；发送探针移到 `onSendFrame` 第一行并统计 `own/enemy`；`holdAsk` 前 3 次回答无论是否一致都打一行；5 s `metrics:` 行新增 `hold=known/asks send=n/enemy`，让「没调用」「被门挡住」「答案一致」三种沉默可区分。契约测试 36 → 37（探针必须在 own-component 门之前），集成 139 → 141。
 
+### 探针退役，游戏 hold 答案改成幂等回退
+
+- **移除三条 SDK 探针**：`tl.tmrNums/tmrJoin/tmrVerdict/tmrField/tmrYawOf/tmrKey/tmrAction`、`tl.sendProbe/tl.probeSend`、
+  `tl.probeFrames` 里的源招式首见调用与 0.6 s 二次读取、`holdAsk` 的 `deflect hold:` 调试行、`onSendFrame` 的探针行与
+  `sendProbe.own/enemy` 计数、5 s `metrics:` 行的 `send=` 字段。它们只在 1.6.4 的两个实机会话里存在过，读数归档在
+  `docs/SDK-API-COVERAGE.md` §7.1–§7.3；未证实的三件事写进 §7.4（不重新引入常驻探针）。
+- `tools/test_api_contract.lua` 改为**负断言**：源码里不得再出现 `SENDARGS`、`tl.probeSend`、`tl.sendProbe`、
+  `tl.tmrProbe`、`tl.tmrAction`、`ACTN %s`、`deflect hold:`；`onSendFrame` 第 2/3 参数改名 `_bullet`/`_rotation`，
+  11 参形状不变，「收到但没读」用下划线前缀表达，不给 lint 增加警告。
+- **游戏 hold 答案改成幂等 + 自动回退**：`tl.installInputState()` 已装即返回同一实例，模块加载失败只尝试一次
+  （`tl.inputStateErr` 记原因，同一局不再重试）；`ad_inputstate` 连续 3 次「API 不可用」类故障（无 input component、
+  无 `SGameInput`、`IsHolding` 抛错、返回非布尔）后自动回退到键判，也可 `o:disable(why)` 手动回退；「还没有角色」
+  「还没有 input action」算暂时状态不计数，一次成功答案即重置连续计数。回退后 `tl.holdAsk` 返回键判且**不再读游戏**。
+- 计数：`ad_inputstate.lua` 90 → 110 行；`tl.api` 26 → 27（`installInputState`）；门禁 645 断言
+  （POLICY 35 / ASYNC 46 / TIMELINE 18 / QUERY 42 / MENU 69 / BRIDGE 115 / COMPAT 29 / TOAST 52 / API_CONTRACT 41 /
+  INPUTSTATE 64 / INTEGRATION 134），selene 0 errors，`check_docs` 一致。
+- 测试证据：`ad_inputstate` 的回退语义先在 `tools/test_inputstate.lua` 上 RED（第 3 次故障后 `dead` 仍为 nil），再实现；
+  集成侧两条断言用**变异验证**证明有牙：去掉 `holdAsk` 的 `IS.dead` 判断 → `a reverted adapter leaves the key answer alone` 失败，
+  把 `installInputState` 改回每次都重建 → `a second install keeps the live adapter` 失败。
+
 ## 1.6.4 — 2026-11-17
 
 修复：在模组菜单里改完设置保存不生效（`Saved/PBZModsMenu-log.txt` 里三次 `ue4ss/pbz-auto-defense: settings not saved`）。
