@@ -51,6 +51,12 @@ eq(src:find("if DEBUG then tl.probeSend(bullet, rotation) end", 1, true) ~= nil,
     "the probe reads the two named arguments and nothing else")
 eq(src:find("tl.probeSend = function(bullet, rotation)", 1, true) ~= nil, true,
     "the probe itself takes the same two arguments")
+-- above the owner gate on purpose: behind it, a whole session printed no SENDARGS
+-- line at all (2026-11-18 log), which looks exactly like "the hook never fires"
+local atProbe = src:find("if DEBUG then tl.probeSend(bullet, rotation) end", 1, true)
+local atGate = src:find("return -- our own", 1, true)
+eq(atProbe ~= nil and atGate ~= nil and atProbe < atGate, true,
+    "the send probe runs before the own-component gate")
 
 -- 2. the bullet-type table matches EDeflectBulletType 0..5
 local body = src:match('tl%.BULLET_TYPES%s*=%s*{(.-)}')

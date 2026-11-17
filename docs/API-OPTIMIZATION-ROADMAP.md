@@ -203,6 +203,24 @@ PBZ AbilityInputComponent 声明了 Try/Force API。Try API 可作为实验候�
 
 如果只减少 API 调用次数却使防守时序变差，必须拒绝这项优化。
 
+### 5.5 首次实测（2026-11-18 04:50–04:59）
+
+条件：`perf=on`、`debug=on`、`loaded v1.6.4`、Lua 5.4 无 JIT、EngineTick 每帧调度；
+9 分钟战斗共 26,926 ticks（≈52 Hz，同期游戏帧率同一量级）。样本取 `perf_log.txt` 里 04:58:26 的稳态块。
+
+| 指标 | 读数 |
+|---|---|
+| tick 每帧开销 | avg 2.05 ms、p50 2 ms、p95 4 ms、p99 7 ms、max 34 ms |
+| 最贵的三段 | `timeline` 0.808 ms（p95 2 / p99 5 / max 7）、`guard release` 0.563 ms（p95 2 / p99 4）、`dodge` 0.249 ms |
+| 其余 stage | 全部 ≤ 0.05 ms avg；`frames probe` 0.107 ms 是 debug-only 探针，单次峰值 30 ms |
+| hooks | 10 s 内 46 次，合计 51 ms，单次最大 34 ms |
+| Lua 内存 | 启动 6.7 MB → 战斗 25–30 MB |
+| hitches > 40 ms | 9 分钟共 103 次；最大 5708 ms（04:50:45 角色加载）、300 ms、238 ms |
+
+读法：稳态 p50 2 ms 里 `timeline`+`guard release`+`dodge` 占约 1.6 ms，这三段是唯一值得优化的对象；
+`max 34 ms` 与 `frames probe max 30 ms` 是同一件事（新目标类第一次探测，关掉 `debug` 即消失）；
+hitches 集中在加载/换角色时刻，还不能归因到 Lua，需与游戏自身卡顿对照。
+
 ## 6. 当前测试覆盖
 
 离线测试入口为：
@@ -234,7 +252,7 @@ bash tools/run_all.sh
 
 开始使用新的游戏类型或函数前，先参阅 [PBZ SDK 与反射资源索引](PBZ-SDK-RESOURCES.md)；逐条核对与新增候选见 [SDK 覆盖审计](SDK-API-COVERAGE.md)。其中区分 PBZModLoader 的 TypeScript Game API SDK、UE4SS C++ SDK Generator 和 PBZ USMAP 映射文件，并标明它们分别适用于哪种 MOD 运行时。
 
-## 8. 上游 API 参考
+## 9. 上游 API 参考
 
 - [UE4SS Delayed Actions](https://github.com/KintaroModding/ue4ss/blob/release/docs/lua-api/global-functions/delayedactions.md)
 - [UE4SS FindAllOf 性能说明](https://github.com/KintaroModding/ue4ss/blob/release/docs/lua-api/global-functions/findallof.md)

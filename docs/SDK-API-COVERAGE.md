@@ -97,5 +97,18 @@
 | 3 | `onSendFrame` 第 2/3 参数命名并在 DEBUG 下打印类型与 `AttackRotation.Yaw` 范围 | `tl.probeSend`（前 3 次 + 每 600 次一行 `SENDARGS …`），契约由 `tools/test_api_contract.lua` 钉住 | `yawrange` 的实际读数（是否 0..360、是否随朝向变化）决定下一轮能否用它判定「背对 / 绕后」 |
 
 > 三条都只读，不改决策：游戏答不上来（无组件、无字段、调用抛错、返回非布尔）一律返回 nil 并走原键判，
-> 每种原因只记一行日志。**尚未进实机**，因此 `LEARN` + `learned_hits.txt` 的退役与
-> `IsHolding` 的全面采信都保持「有证据再改」的状态。
+> 每种原因只记一行日志。`LEARN` + `learned_hits.txt` 的退役与 `IsHolding` 的全面采信都保持「有证据再改」的状态。
+
+### 7.1 首次实机读数（2026-11-18 04:50–04:59，`debug=on`）
+
+会话事实：`loaded v1.6.4`、`runtime: Lua 5.4 / no JIT`、`tl api: 26 public names of 249 fields`、
+26,926 ticks、`results: mod deflect Perfect 51, you deflect Perfect 6`。
+
+| # | 读数 | 为什么它答不了问题 | 已做的修正 |
+|---|---|---|---|
+| 1 | `TMR` **1 行**：`LGAAction_DurationBulletWithDeflect frames=[0.000] prehit=0.300 timeline=[] … -> not in the timeline`；同一局 66 条 `FRAME+` 的 `src=` **全部**是这一个类 | 帧扫描拿到的 `SourceAction` 是 LGA 动作包装类，不是 timeline 的键（`GA_*`/montage 名），判词必然落到 `not in the timeline` | 探针改在 `onActivate` 里对激活的敌人招式调用（那里同时有 `GA_*` 名与 `SendFrameTimes`），每局最多 40 个类 |
+| 2 | `deflect hold` **0 行**、`input state unavailable` **0 行** | 模块装上且没报失败，但「一致时不打日志」让「游戏答不上来」与「答案和键判一致」同形 | 前 3 次回答无论是否一致都打一行；5 s 的 `metrics:` 行加 `hold=known/asks` |
+| 3 | `SENDARGS` **0 行**、`attack seen` **0 行**、`attacks_log` 里 `SEND ` **0 行**，而同局的 `FRAME+` 有 66 行 | 探针原本在「自家 component 早退」之后，整局都没走到——看起来和「hook 没触发」一模一样 | 探针移到函数第一行（契约测试钉住位置），并加 `own/enemy` 计数，经 `metrics: … send=n/enemy` 暴露 |
+
+> 结论：三条**仍未取得实机结论**，需要重启游戏用当前构建再跑一局（`debug=on`）。
+> 这一轮的收获不是 SDK 行为，而是「探针会沉默」：没调用、被门挡住、答案一致，三种沉默必须能被日志区分开。

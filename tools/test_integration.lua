@@ -289,6 +289,10 @@ do
     eq(verdict, "not in the timeline", "an ability outside hit_times.txt is named")
     eq(T.tmrJoin({ 0.5, 1.25 }), "0.500 1.250", "the log format is fixed")
     eq(#T.tmrNums({ 0.25, 0.5 }), 2, "a plain array is read as numbers")
+    -- the two probe counters are what makes "no log line" distinguishable from
+    -- "never called"; a typo here would read as nil in the metrics line
+    eq(T.sendProbe.own, 0, "the own-component counter starts at zero")
+    eq(T.sendProbe.enemy, 0, "the enemy counter starts at zero")
 end
 
 -- A (P0-3): the decision chain's early exits. The fake Deflect Component answers

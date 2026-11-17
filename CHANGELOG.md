@@ -84,6 +84,7 @@ Versions are the `tl.VERSION` value in `Scripts/main.lua`; the release tag is `v
 - **参数类型可见**：`onSendFrame` 第 2、3 参数由占位符改为 `bullet` / `rotation`；DEBUG 下每会话前 3 次（之后每 600 次）打印 `SENDARGS bullet=<type:class> rotation=<type> yaw=<值> yawrange=<min..max> kinds=…`。SDK 只钉顺序不钉类型，`AttackRotation.Yaw` 的实际读数范围是下一轮读帧逻辑的前提。
 - `tl.api` 25 → 26（新增 `holdAsk(keyHeld, pawn)`）；`tools/test_api_contract.lua` 34 → 36 断言（2/3 位必须命名为 `bullet`/`rotation`，且探针只读这两个名字）；新增 `tools/test_inputstate.lua`（40 断言）并进 `tools/run_all.sh`；集成套件 123 → 139（无角色时回落键判、游戏答案覆盖键判、注入窗口内不采信、每次提问只读一次、`tl.api` 26 项都存在、帧时间比较的 5 种判定与日志格式）。门禁合计 621 断言。
 - 文档：`docs/SDK-API-COVERAGE.md` §4/§6/§7 从「待决定」改为「已落地，待实机确认」；`docs/MODULES.md`、`README.md`、`docs/ARCHITECTURE.md` 补模块行与计数。
+- **首次实机（2026-11-18 04:50–04:59，9 分钟 26,926 ticks）三条都还没结论，因为探针自己沉默**：帧扫描的 `SourceAction` 全是 `LGAAction_DurationBulletWithDeflect`（66/66），不是 timeline 的键，判词只能落到 `not in the timeline`；`SENDARGS` 0 行不是 hook 没触发，而是探针在「自家 component 早退」之后，整局没走到。修正：帧时间探针改在 `onActivate` 对激活的敌人招式调用（每局 ≤40 个类）；发送探针移到 `onSendFrame` 第一行并统计 `own/enemy`；`holdAsk` 前 3 次回答无论是否一致都打一行；5 s `metrics:` 行新增 `hold=known/asks send=n/enemy`，让「没调用」「被门挡住」「答案一致」三种沉默可区分。契约测试 36 → 37（探针必须在 own-component 门之前），集成 139 → 141。
 
 ## 1.6.4 — 2026-11-17
 

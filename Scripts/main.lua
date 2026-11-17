@@ -2462,7 +2462,7 @@ end
 -- SendDeflectFrame argument shapes (debug only): the SDK pins the order of the 11
 -- arguments, not the runtime type of Bullet / AttackRotation, and a wrong read
 -- there is silent. Types and the yaw range, a few lines per session.
-tl.sendProbe = { n = 0, lines = 0, kinds = {}, yawMin = nil, yawMax = nil, reads = {
+tl.sendProbe = { n = 0, lines = 0, own = 0, enemy = 0, kinds = {}, yawMin = nil, yawMax = nil, reads = {
     function(v) return v.Yaw end,
     function(v) return unwrap(v).Yaw end,
     function(v) return unwrap(v)["Yaw"] end,
@@ -2499,7 +2499,8 @@ tl.probeSend = function(bullet, rotation)
         local kinds = {}
         for k in pairs(sp.kinds) do kinds[#kinds + 1] = k end
         local okR, r = pcall(function() return unwrap(rotation) end)
-        attackLog("SENDARGS n=%d bullet=%s rotation=%s yaw=%s yawrange=%s kinds=%s", sp.n, bkind,
+        attackLog("SENDARGS n=%d own=%d enemy=%d bullet=%s rotation=%s yaw=%s yawrange=%s kinds=%s", sp.n,
+            sp.own or 0, sp.enemy or 0, bkind,
             type(okR and r or rotation), yaw and string.format("%.2f", yaw) or "?",
             sp.yawMin and string.format("%.1f..%.1f", sp.yawMin, sp.yawMax) or "-",
             table.concat(kinds, ","))
@@ -3983,8 +3984,8 @@ tl.holdAsk = function(keyHeld, pawn)
     -- back as the player holding the guard
     local injecting = tapHold ~= nil or os.clock() - (tl.injectAt or -1e9) < TAP_HOLD
     local answer, why = IS.pick(held, keyHeld, injecting)
-    if DEBUG and answer ~= keyHeld and os.clock() >= (tl.holdLogAt or 0) then
-        tl.holdLogAt = os.clock() + 1
+    if DEBUG and (answer ~= keyHeld or (tl.holdAnswers or 0) < 3) and os.clock() >= (tl.holdLogAt or 0) then
+        tl.holdLogAt, tl.holdAnswers = os.clock() + 1, (tl.holdAnswers or 0) + 1
         log("deflect hold: game=%s keys=%s -> %s (%s%s)", tostring(held), tostring(keyHeld),
             tostring(answer), why, secs and string.format(", held %.2fs", secs) or "")
     end
@@ -4255,6 +4256,14 @@ local function onActivate(ctx)
     local actor = avatarOf(ab)
     if not actor or actor:GetAddress() == currentPawn:GetAddress() then return end
     local n = short(ab:GetClass())
+    -- debug only: the frames path only ever sees LGAAction_* wrappers, whose names are
+    -- not timeline keys; an activated enemy ability is the object that has both a
+    -- GA_* name and frame times, and 40 classes are enough to judge the clock
+    if DEBUG and not tl.tmrSeen[n] and (tl.tmrN or 0) < 40 then
+        tl.tmrSeen[n] = true
+        tl.tmrN = (tl.tmrN or 0) + 1
+        tl.tmrProbe(n, ab)
+    end
     local tlNote = queueTimeline(ab, n, actor, currentPawn, "hook")
     -- a grab with its ExecutionTimeline in hit_times.txt is handled there (its
     -- red grab hit comes seconds in, after hits that are parried: test10h
@@ -4548,18 +4557,23 @@ local function tagName(param)
 end
 
 local function onSendFrame(ctx, action, bullet, rotation, _, _, strength, direction, _, _, isDodge, counter)
+    -- the probe runs first on purpose: it has to see every call, including the ones
+    -- this mod's own component makes and the ones the owner check below cuts off.
+    -- 2026-11-18 session: zero SENDARGS lines, because the probe sat behind that gate
+    if DEBUG then tl.probeSend(bullet, rotation) end
     local comp = unwrap(ctx)
     local okO, owner = pcall(function() return comp:GetOwner() end)
     owner = okO and valid(owner) and owner or nil
-    if owner and valid(currentPawn) and owner:GetAddress() == currentPawn:GetAddress() then return end -- our own
+    if owner and valid(currentPawn) and owner:GetAddress() == currentPawn:GetAddress() then
+        tl.sendProbe.own = (tl.sendProbe.own or 0) + 1
+        return -- our own
+    end
+    tl.sendProbe.enemy = (tl.sendProbe.enemy or 0) + 1
     local okA, act = pcall(function() return unwrap(action) end)
     local actName = okA and valid(act) and short(act:GetClass()) or "-"
     local okD, red = pcall(function() return unwrap(isDodge) end)
     local okK, ctr = pcall(function() return unwrap(counter) end)
     local st, dir = tagName(strength), tagName(direction)
-    -- the order is pinned by the contract test; the runtime type of these two is
-    -- not, so it is logged instead of assumed (debug only)
-    if DEBUG then tl.probeSend(bullet, rotation) end
     local word = matchDodgeWord(actName .. " " .. st .. " " .. dir)
     enemyScanWanted = true
     attackLog("SEND %s | %s | strength=%s direction=%s isDodge=%s counter=%s%s",
@@ -4945,7 +4959,11 @@ tl.main = function(id)
             if tl.input and tl.input.stats then asked = select(1, tl.input.stats()) or 0 end
             if tl.policy and tl.policy.stats then denied = select(2, tl.policy.stats()) or 0 end
             if tl.bus and tl.bus.stats then drop = tl.bus.stats().dropped or 0 end
-            tl.led("metrics: drop=%d asked=%d denied=%d lua=%.0fKB", drop, asked, denied, collectgarbage("count"))
+            local asks, known = 0, 0
+            if tl.inputState then asks, known = tl.inputState.stats() end
+            local sp = tl.sendProbe
+            tl.led("metrics: drop=%d asked=%d denied=%d lua=%.0fKB hold=%d/%d send=%d/%d", drop, asked, denied,
+                collectgarbage("count"), known, asks, sp.n or 0, sp.enemy or 0)
         end
     end
     if hk.menu then guarded("menu config", hk.menu.poll, hk.menu, t) end
