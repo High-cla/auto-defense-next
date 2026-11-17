@@ -1,4 +1,4 @@
-# Module layout (1.6.4)
+# Module layout (1.6.5)
 
 Decision and execution order is unchanged. What moved is **where each concern lives**
 and **which door every side effect goes through**. Behaviour changes are listed in the

@@ -2,7 +2,7 @@
 
 Versions are the `tl.VERSION` value in `Scripts/main.lua`; the release tag is `v<version>`.
 
-## Unreleased
+## 1.6.5 — 2026-11-18
 
 基于 UE4SS、PBZModLoader 和 PBZ USMAP 上游文档进行 API 核对与运行时优化（详见 [UPSTREAM-API-GUIDE.md](docs/UPSTREAM-API-GUIDE.md)）。
 
