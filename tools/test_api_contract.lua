@@ -31,16 +31,26 @@ for p in sig:gmatch("[^,]+") do
 end
 eq(params[1], "ctx", "the first parameter is the hook's RemoteUnrealParam context")
 local SDK_ORDER = { [1] = "action", [6] = "strength", [7] = "direction", [10] = "isDodge", [11] = "counter" }
+-- Two arguments are named because the debug probe reads them: the SDK declares
+-- Bullet and AttackRotation by position only, never their runtime type, so the
+-- shapes are logged instead of assumed. Their position is still the contract.
+local NAMED = { [2] = "bullet", [3] = "rotation" }
 for i = 1, 11 do
     local p = params[i + 1]
     eq(p ~= nil, true, "SendDeflectFrame parameter " .. i .. " exists")
     if SDK_ORDER[i] then
         eq(p, SDK_ORDER[i], "parameter " .. i .. " keeps its SDK position")
+    elseif NAMED[i] then
+        eq(p, NAMED[i], "parameter " .. i .. " names the argument the probe reads")
     else
         eq(p == "_", true, "parameter " .. i .. " is an unused placeholder, as declared")
     end
 end
 eq(params[13], nil, "SendDeflectFrame has 11 parameters, so nothing follows the last")
+eq(src:find("if DEBUG then tl.probeSend(bullet, rotation) end", 1, true) ~= nil, true,
+    "the probe reads the two named arguments and nothing else")
+eq(src:find("tl.probeSend = function(bullet, rotation)", 1, true) ~= nil, true,
+    "the probe itself takes the same two arguments")
 
 -- 2. the bullet-type table matches EDeflectBulletType 0..5
 local body = src:match('tl%.BULLET_TYPES%s*=%s*{(.-)}')

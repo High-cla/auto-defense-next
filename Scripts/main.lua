@@ -1846,6 +1846,9 @@ local function injectKey(action)
     local sub = lib:GetLocalPlayerSubSystemFromPlayerController(ctrl, cls)
     if not valid(sub) then return false end
     sub:InjectInputVectorForAction(action, { X = 1.0, Y = 0.0, Z = 0.0 }, {}, {})
+    -- stamped at the one injection point: the game then reports IA_Deflect as
+    -- held, which must not be read back as "the player holds the guard"
+    tl.injectAt = os.clock()
     return true
 end
 
@@ -2388,6 +2391,121 @@ tl.probeLog = function(fmt, ...)
     if pr.lines <= tl.PROBE_MAX_LINES then attackLog(fmt, ...) end
     if pr.lines == tl.PROBE_MAX_LINES then attackLog("FRAME probe: %d lines, no more this session", pr.lines) end
 end
+-- Frame-times probe (debug only, read only): the SDK exposes the action's own
+-- deflect-frame times and its pre-hit-point duration (PBZDeflectSystem.d.ts:169-175).
+-- Read once per ability class and set against the timeline the mod schedules from,
+-- so the learned table can be checked against the game's own numbers instead of
+-- against how the fight felt. A constant offset means the two share a clock, a
+-- spread means they do not.
+tl.tmrSeen = {}
+tl.tmrJoin = function(t)
+    local p = {}
+    for i = 1, #t do p[i] = string.format("%.3f", t[i]) end
+    return table.concat(p, " ")
+end
+tl.tmrNums = function(v)
+    local out = {}
+    if v == nil then return out end
+    local okN, n = pcall(function() return #v end)
+    if not okN or type(n) ~= "number" then return out end
+    for i = 1, math.min(n, 8) do
+        local okI, x = pcall(function() return v[i] end)
+        if okI then
+            local okU, u = pcall(function() return x:get() end)
+            local num = tonumber(okU and u or x)
+            if num then out[#out + 1] = num end
+        end
+    end
+    return out
+end
+-- the comparison on its own, so the verdict can be tested without a game action
+tl.tmrVerdict = function(frames, data)
+    local n = math.min(#frames, #data)
+    local max, lo, hi = 0, nil, nil
+    for i = 1, n do
+        local d = frames[i] - data[i]
+        if math.abs(d) > max then max = math.abs(d) end
+        if not lo or d < lo then lo = d end
+        if not hi or d > hi then hi = d end
+    end
+    local spread = n > 0 and (hi - lo) or 0
+    local verdict
+    if #frames == 0 then verdict = "frames unreadable"
+    elseif #data == 0 then verdict = "not in the timeline"
+    elseif n < #frames or n < #data then verdict = "count differs"
+    elseif max <= 0.05 then verdict = "same clock"
+    elseif spread <= 0.05 then verdict = "constant offset"
+    else verdict = "differs" end
+    return verdict, max, spread
+end
+tl.tmrProbe = function(cls, src)
+    local okS, times = pcall(function() return src.SendFrameTimes end)
+    local frames = okS and tl.tmrNums(times) or {}
+    local pre
+    for _, f in ipairs({ "PreHitPointDuration", "RuntimePreHitPointDuration" }) do
+        local okP, v = pcall(function() return src[f] end)
+        local num = okP and tonumber(v) or nil
+        if num then pre = num break end
+    end
+    local base = RT.bname(cls) or cls
+    local hits, data = hitTimes[base], {}
+    for i = 1, math.min(#(hits or {}), 8) do
+        local h = hits[i]
+        data[#data + 1] = type(h) == "number" and h or h[1]
+    end
+    local verdict, max, spread = tl.tmrVerdict(frames, data)
+    tl.probeLog("TMR %s frames=[%s] prehit=%s timeline=[%s] delta max=%.3f spread=%.3f -> %s",
+        cls, tl.tmrJoin(frames), pre and string.format("%.3f", pre) or "?",
+        tl.tmrJoin(data), max, spread, verdict)
+end
+
+-- SendDeflectFrame argument shapes (debug only): the SDK pins the order of the 11
+-- arguments, not the runtime type of Bullet / AttackRotation, and a wrong read
+-- there is silent. Types and the yaw range, a few lines per session.
+tl.sendProbe = { n = 0, lines = 0, kinds = {}, yawMin = nil, yawMax = nil, reads = {
+    function(v) return v.Yaw end,
+    function(v) return unwrap(v).Yaw end,
+    function(v) return unwrap(v)["Yaw"] end,
+    function(v) return v:get().Yaw end,
+} }
+tl.probeSend = function(bullet, rotation)
+    local sp = tl.sendProbe
+    sp.n = sp.n + 1
+    local okB, b = pcall(function() return unwrap(bullet) end)
+    b = okB and b or nil
+    local bkind = type(b)
+    if b ~= nil then
+        local okC, c = pcall(function() return b:GetClass() end)
+        if okC and c ~= nil then
+            local okS, sh = pcall(short, c)
+            bkind = bkind .. ":" .. tostring(okS and sh or "?")
+        end
+    end
+    sp.kinds[bkind] = true
+    local yaw
+    for _, read in ipairs(sp.reads) do
+        local ok, v = pcall(read, rotation)
+        if ok then
+            yaw = tonumber(v)
+            if yaw then break end
+        end
+    end
+    if yaw then
+        if not sp.yawMin or yaw < sp.yawMin then sp.yawMin = yaw end
+        if not sp.yawMax or yaw > sp.yawMax then sp.yawMax = yaw end
+    end
+    if sp.lines < 3 or sp.n % 600 == 0 then
+        sp.lines = sp.lines + 1
+        local kinds = {}
+        for k in pairs(sp.kinds) do kinds[#kinds + 1] = k end
+        local okR, r = pcall(function() return unwrap(rotation) end)
+        attackLog("SENDARGS n=%d bullet=%s rotation=%s yaw=%s yawrange=%s kinds=%s", sp.n, bkind,
+            type(okR and r or rotation), yaw and string.format("%.2f", yaw) or "?",
+            sp.yawMin and string.format("%.1f..%.1f", sp.yawMin, sp.yawMax) or "-",
+            table.concat(kinds, ","))
+    end
+end
+
 tl.probeFrames = function(pawn, deflect, now)
     local pr = tl.probe
     if pr.off then return end
@@ -2421,6 +2539,10 @@ tl.probeFrames = function(pawn, deflect, now)
                         if okB and type(b) == "number" then btype = tl.BULLET_TYPES[b] or tostring(b) break end
                     end
                     by = tl.probeAttacker(src)
+                    if not tl.tmrSeen[srcName] then
+                        tl.tmrSeen[srcName] = true
+                        tl.tmrProbe(srcName, src)
+                    end
                 end
                 local okT, st = pcall(function() return data.DeflectStrength.TagName:ToString() end)
                 e = { hit = known and hit or nil, first = now }
@@ -3828,6 +3950,47 @@ local STANCE_RETRY = 1.5
 local stanceOn, stanceSince, stanceCheckAt = false, 0, 0
 local deflectKeys = nil
 
+-- SDK 0.3.3: ask the game whether the deflect input is held instead of inferring
+-- it from the physical keys alone (SGameInputComponent.IsHolding/GetHoldTime,
+-- SGameInputSystem.d.ts:299-302). Read only. Every path where the game cannot
+-- answer - no component, no field, a throwing call, or an answer this mod's own
+-- injection explains - returns nil and leaves the key state in charge, so a game
+-- update cannot stop the guard from being released.
+do
+    local function install()
+        local IS = dofile(MOD_DIR .. "Scripts/ad_inputstate.lua").new({
+            component = component,
+            prop = Q.prop,
+            isHolding = function(sgi, act) return unwrap(sgi:IsHolding(act)) end,
+            holdTime = function(sgi, act) return unwrap(sgi:GetHoldTime(act)) end,
+            log = log,
+        })
+        tl.inputState = IS
+    end
+    local okI, errI = pcall(install)
+    if not okI then log("input state unavailable: %s", tostring(errI)) end
+end
+-- keyHeld is what the key path answered; the game's answer overrides it where it
+-- exists. The pawn is a parameter so a test can ask without a live character.
+tl.holdAsk = function(keyHeld, pawn)
+    local IS = tl.inputState
+    if not IS then return keyHeld end
+    local p = pawn or currentPawn
+    if not valid(p) then return keyHeld end
+    local held, secs = IS.read(p, inputAction("IA_Deflect"))
+    if held == nil then return keyHeld end
+    -- an injected press makes the action look held for TAP_HOLD: never read that
+    -- back as the player holding the guard
+    local injecting = tapHold ~= nil or os.clock() - (tl.injectAt or -1e9) < TAP_HOLD
+    local answer, why = IS.pick(held, keyHeld, injecting)
+    if DEBUG and answer ~= keyHeld and os.clock() >= (tl.holdLogAt or 0) then
+        tl.holdLogAt = os.clock() + 1
+        log("deflect hold: game=%s keys=%s -> %s (%s%s)", tostring(held), tostring(keyHeld),
+            tostring(answer), why, secs and string.format(", held %.2fs", secs) or "")
+    end
+    return answer
+end
+
 deflectKeyHeld = function()
     local cached = tl.keysCached("deflect")
     if cached ~= nil then return cached end
@@ -3857,7 +4020,11 @@ deflectKeyHeld = function()
             log("deflect keys: %s", #names > 0 and table.concat(names, ", ") or "unknown (manual hold not detected)")
         end
     end
-    return tl.keysDown(ctrl, deflectKeys, "deflect")
+    local keyHeld = tl.keysDown(ctrl, deflectKeys, "deflect")
+    local held = tl.holdAsk(keyHeld)
+    -- keysDown cached the key answer; the cache has to hold what callers receive
+    if held ~= keyHeld then tl.keyState["deflect"] = { at = os.clock(), down = held } end
+    return held
 end
 
 local stanceFields, stanceFieldsLast = nil, nil
@@ -4380,7 +4547,7 @@ local function tagName(param)
     return ok and s or "?"
 end
 
-local function onSendFrame(ctx, action, _, _, _, _, strength, direction, _, _, isDodge, counter)
+local function onSendFrame(ctx, action, bullet, rotation, _, _, strength, direction, _, _, isDodge, counter)
     local comp = unwrap(ctx)
     local okO, owner = pcall(function() return comp:GetOwner() end)
     owner = okO and valid(owner) and owner or nil
@@ -4390,6 +4557,9 @@ local function onSendFrame(ctx, action, _, _, _, _, strength, direction, _, _, i
     local okD, red = pcall(function() return unwrap(isDodge) end)
     local okK, ctr = pcall(function() return unwrap(counter) end)
     local st, dir = tagName(strength), tagName(direction)
+    -- the order is pinned by the contract test; the runtime type of these two is
+    -- not, so it is logged instead of assumed (debug only)
+    if DEBUG then tl.probeSend(bullet, rotation) end
     local word = matchDodgeWord(actName .. " " .. st .. " " .. dir)
     enemyScanWanted = true
     attackLog("SEND %s | %s | strength=%s direction=%s isDodge=%s counter=%s%s",
@@ -5158,6 +5328,7 @@ do
         "tickReceipt", "fxScan", "fxDue", "fxClear", "pressTap", "releaseHeldKey",
         "menu", "input", "policy", "bus", "warm", "led", "ledFlush", "emit", "err", "logState",
         "dat", "pd", "guardOwned", "pruneHandles", "VERSION", "busIdx", "api", "log", "teardown",
+        "holdAsk",
     }
     local fields = 0
     for _ in pairs(tl) do fields = fields + 1 end

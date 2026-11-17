@@ -230,9 +230,66 @@ if type(RT) == "table" then
     eq(RT.jit == nil or type(RT.jit) == "string", true, "runtime jit is a name or absent")
 end
 -- E (P1-5): the documented surface is pinned, not grown by accident
-eq(#T.api, 25, "the public surface stays at the 25 documented names")
+eq(#T.api, 26, "the public surface stays at the 26 documented names")
 eq(type(T.VERSION) == "string" and T.VERSION:match("^%d+%.%d+%.%d+$") ~= nil, true,
     "VERSION is semantic: " .. tostring(T.VERSION))
+
+-- B (SDK 0.3.3): the game's own "is the deflect input held" answer replaces the key
+-- inference where it exists, and the key answer stands where it does not. Both
+-- halves run against the real module with a fake input component.
+do
+    eq(type(T.holdAsk), "function", "the hold question is part of the runtime surface")
+    eq(T.holdAsk(false), false, "no character: the key answer is unchanged")
+    eq(T.holdAsk(true), true, "no character: a held key stays held")
+    local realStatic, realIS, realInject = StaticFindObject, T.inputState, T.injectAt
+    StaticFindObject = function(path)
+        if type(path) == "string" and path:find("IA_Deflect", 1, true) then
+            return { IsValid = function() return true end, GetFullName = function() return path end }
+        end
+        return nil
+    end
+    local Q = dofile("Scripts/ad_query.lua")
+    local sgi = { IsHolding = function() return true end, GetHoldTime = function() return 0.42 end }
+    local pawn = { IsValid = function() return true end, GetAddress = function() return 903 end }
+    pawn["Ability Input Component"] = { IsValid = function() return true end, SGameInput = sgi }
+    local module = dofile("Scripts/ad_inputstate.lua")
+    T.inputState = module.new({
+        component = Q.component, prop = Q.prop,
+        isHolding = function(s, a) return Q.unwrap(s:IsHolding(a)) end,
+        holdTime = function(s, a) return Q.unwrap(s:GetHoldTime(a)) end,
+        log = function() end,
+    })
+    T.injectAt = -1e9
+    eq(T.holdAsk(false, pawn), true, "the game's answer wins over a released key")
+    T.injectAt = os.clock()
+    eq(T.holdAsk(false, pawn), false, "our own injection is not the player holding the guard")
+    local asks = select(1, T.inputState.stats())
+    eq(asks, 2, "each question reaches the game reader once")
+    T.injectAt = realInject
+    T.inputState, StaticFindObject = realIS, realStatic
+end
+
+-- B (SDK 0.3.3): the frame-times comparison. The game's own SendFrameTimes are read
+-- in debug only, so what the offline gate can pin is the judgement itself: what
+-- "the same clock" means and what it refuses to call a match.
+do
+    eq(type(T.tmrVerdict), "function", "the frame-time comparison is a seam")
+    local verdict, max = T.tmrVerdict({ 0.5, 1.0, 1.5 }, { 0.5, 1.0, 1.5 })
+    eq(verdict, "same clock", "identical timelines are the same clock")
+    eq(max, 0, "identical timelines have no delta")
+    verdict = T.tmrVerdict({ 0.8, 1.3, 1.8 }, { 0.5, 1.0, 1.5 })
+    eq(verdict, "constant offset", "a constant shift is one clock with an offset")
+    verdict = T.tmrVerdict({ 0.5, 1.4 }, { 0.5, 1.0 })
+    eq(verdict, "differs", "a growing delta is not the same timeline")
+    verdict = T.tmrVerdict({ 0.5, 1.0 }, { 0.5 })
+    eq(verdict, "count differs", "a different hit count is reported, not averaged")
+    verdict = T.tmrVerdict({}, { 0.5 })
+    eq(verdict, "frames unreadable", "an unreadable array is not 'no hits'")
+    verdict = T.tmrVerdict({ 0.5 }, {})
+    eq(verdict, "not in the timeline", "an ability outside hit_times.txt is named")
+    eq(T.tmrJoin({ 0.5, 1.25 }), "0.500 1.250", "the log format is fixed")
+    eq(#T.tmrNums({ 0.25, 0.5 }), 2, "a plain array is read as numbers")
+end
 
 -- A (P0-3): the decision chain's early exits. The fake Deflect Component answers
 -- the queries with fixed handles, the fake Ability Input Component counts the
