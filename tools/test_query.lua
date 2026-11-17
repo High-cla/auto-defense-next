@@ -35,5 +35,9 @@ assert(found ~= nil, "late-loaded CDO is found on the next retry")
 assert(Q.tagLibrary() == found, "successful object is cached")
 assert(scans == 3, "cached success avoids further global scans")
 
+-- Optional CDOs may be unavailable during startup/build transitions.
+assert(Q.ascOf({}) == nil, "missing AbilitySystemBlueprintLibrary is a safe nil result")
+assert(Q.nowOf({}) == 0, "missing GameplayStatics is a safe zero-time result")
+
 os.clock, StaticFindObject, ForEachUObject = oldClock, oldFind, oldEach
-print("QUERY PASS 12 assertions")
+print("QUERY PASS 14 assertions")
