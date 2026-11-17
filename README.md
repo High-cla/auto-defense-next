@@ -95,6 +95,7 @@ git commit                   # pre-commit 自动跑同一道门禁
 - [docs/PBZ-GAME-API-REFERENCE.md](docs/PBZ-GAME-API-REFERENCE.md)：PBZ DeflectComponent、AbilityInputComponent、Enhanced Input 与 SDK 验证等级
 - [docs/PBZ-USMAP-TOOLCHAIN.md](docs/PBZ-USMAP-TOOLCHAIN.md)：PBZ USMAP live/offline 采集、映射格式、合并和质量检查
 - [docs/API-OPTIMIZATION-ROADMAP.md](docs/API-OPTIMIZATION-ROADMAP.md)：已完成优化、候选 API 风险分级、性能 A/B 与实机验收
+- [docs/PBZMODSMENU-API-REFERENCE.md](docs/PBZMODSMENU-API-REFERENCE.md)：PBZModsMenu 菜单 API（描述符字段、事件与桥的写盘契约、已知坑，按本机 main.js 核对）
 
 ## Nexus Mods 发布
 
@@ -199,6 +200,7 @@ This runs the policy, async, timeline, query, menu-config, menu-bridge, and inte
 - [docs/PBZ-GAME-API-REFERENCE.md](docs/PBZ-GAME-API-REFERENCE.md): PBZ DeflectComponent, AbilityInputComponent, Enhanced Input, SDK coverage, and verification levels.
 - [docs/PBZ-USMAP-TOOLCHAIN.md](docs/PBZ-USMAP-TOOLCHAIN.md): live/offline type capture, USMAP format, merging, quality checks, and build workflow.
 - [docs/API-OPTIMIZATION-ROADMAP.md](docs/API-OPTIMIZATION-ROADMAP.md): implemented changes, API candidates, risk levels, A/B measurement, and in-game validation.
+- [docs/PBZMODSMENU-API-REFERENCE.md](docs/PBZMODSMENU-API-REFERENCE.md): PBZModsMenu menu API — descriptor fields, event and bridge write contract, and the pitfalls, checked against the local main.js.
 - [MODULES.md](MODULES.md): module boundaries and the public runtime surface.
 - [MENU-INTEGRATION.md](MENU-INTEGRATION.md): native menu configuration and compatibility boundaries.
 
