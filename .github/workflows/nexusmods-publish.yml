@@ -153,7 +153,6 @@ jobs:
       NEXUSMODS_API_KEY: ${{ secrets.NEXUSMODS_API_KEY }}
       NEXUSMODS_FILE_ID: ${{ vars.NEXUSMODS_FILE_ID }}
       NEXUSMODS_MOD_ID: ${{ vars.NEXUSMODS_MOD_ID }}
-    env:
       RELEASE_TAG: ${{ inputs.release_tag }}
     steps:
       - name: Validate manual release input and Nexus configuration
