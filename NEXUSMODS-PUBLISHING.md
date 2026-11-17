@@ -5,7 +5,7 @@
 - **首次创建**：手动运行 Nexus Mods publish workflow。workflow 先运行项目测试，再下载现有 GitHub Release `v1.6.4` 的 ZIP，并校验已发布的文件大小和 SHA-256；随后通过 Nexus Mods v3 单段上传 API 上传该 ZIP，并创建第一条 Main file 记录；若该 file entry 已存在但没有版本，则为它创建首个版本。
 - **后续更新**：每次发布 GitHub Release，workflow 使用官方 Nexus-Mods/upload-action 为既有 file entry 追加新版本。
 
-合并 PR 不会自动上传。首次上传需要维护者手动运行 workflow，并把确认项设置为 true。
+合并 PR 不会自动上传。首次上传需要维护者手动运行 workflow，并把确认项设置为 true。 首次上传 job 在 workflow 内强制要求 `github.ref == 'refs/heads/main'`；从其他分支 dispatch 会明确失败，不会进入生产上传 job。
 
 ## 已提供的 ID
 
@@ -16,7 +16,7 @@
 
 这两个 ID 不可互换。若 8404851 不属于该模组，脚本不会使用它；如果目标文件记录尚不存在，API 创建 Main file 后会返回新的 file ID。
 
-NEXUSMODS_MOD_ID 保存的是网站 URL 中的 game-scoped 数字 ID。首次创建 file entry 时，Create Mod File 请求使用 Get Mod 响应中的 game_scoped_id；后续 upload-action 写 changelog 时使用 /mods/{id}/changelogs 所需的内部 API mod ID。后续发布 job 会运行 tools/nexusmods_resolve_mod.py，从 GET /games/phantombladezero/mods/{NEXUSMODS_MOD_ID} 自动解析内部 ID，不要把两个 ID 当作同一个值。
+NEXUSMODS_MOD_ID 保存的是网站 URL 中的 game-scoped 数字 ID。首次创建 file entry 时，Create Mod File 请求使用 Get Mod 响应中的 game_scoped_id；后续 upload-action 写 changelog 时使用 /mods/{id}/changelogs 所需的内部 API mod ID。后续发布 job 会运行 tools/nexusmods_resolve_mod.py，从 GET /games/phantombladezero/mods/{NEXUSMODS_MOD_ID} 自动解析内部 ID，不要把两个 ID 当作同一个值。 同一步还会调用 GET /mods/{internal_mod_id}/files，并要求 `NEXUSMODS_FILE_ID` 在该 Mod 的 `mod_files` 列表中恰好出现一次、文件名恰好为 `PBZ Auto Defense`。如果 ID 不属于该 Mod、名称不匹配或 API 响应不完整，workflow 会在调用官方 upload-action 之前失败。
 
 ## 1. 配置 GitHub Secrets / Variables
 
@@ -89,7 +89,7 @@ workflow 将会：
 - Requirements popup：关闭
 - Mod page version：同步文件版本
 
-ZIP 只包含游戏运行时文件：Scripts/*.lua、data/ad_data.lua、enabled.txt、pbz-auto-defense.modsmenu.json。不会把 UE4SS、Mods Menu、游戏本体、文档、测试、生成器、日志、玩家配置或学习数据一起上传。
+ZIP 只包含游戏运行时文件：Scripts/*.lua、data/ad_data.lua、enabled.txt、pbz-auto-defense.modsmenu.json。 PR 的 `pull_request.paths` 也显式包含 `enabled.txt` 和 `pbz-auto-defense.modsmenu.json`，保证单独修改这两个打包输入时也会触发验证。不会把 UE4SS、Mods Menu、游戏本体、文档、测试、生成器、日志、玩家配置或学习数据一起上传。
 
 ## 5. 安全与重试
 
