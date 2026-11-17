@@ -230,6 +230,10 @@ bash tools/run_all.sh
 - tools/test_integration.lua：主循环调度/handle 集成测试
 - tools/run_all.sh：统一离线测试入口
 
+## 8. SDK 与反射资源
+
+开始使用新的游戏类型或函数前，先参阅 [PBZ SDK 与反射资源索引](PBZ-SDK-RESOURCES.md)。其中区分 PBZModLoader 的 TypeScript Game API SDK、UE4SS C++ SDK Generator 和 PBZ USMAP 映射文件，并标明它们分别适用于哪种 MOD 运行时。
+
 ## 8. 上游 API 参考
 
 - [UE4SS Delayed Actions](https://github.com/KintaroModding/ue4ss/blob/release/docs/lua-api/global-functions/delayedactions.md)
