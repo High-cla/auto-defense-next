@@ -105,11 +105,24 @@ function M.component(pawn, propName)
 end
 
 function M.ascOf(pawn)
-    return M.obj("/Script/GameplayAbilities.Default__AbilitySystemBlueprintLibrary"):GetAbilitySystemComponent(pawn)
+    if pawn == nil then return nil end
+    -- The CDO can be absent during early startup or after a build change.
+    -- Treat it as an unavailable query, not an exception in the defense tick.
+    local okLib, lib = pcall(M.obj, "/Script/GameplayAbilities.Default__AbilitySystemBlueprintLibrary")
+    if not okLib or lib == nil then return nil end
+    local ok, asc = pcall(function() return lib:GetAbilitySystemComponent(pawn) end)
+    if not ok or asc == nil then return nil end
+    local okValid, alive = pcall(function() return asc:IsValid() end)
+    if okValid and alive then return asc end
+    return nil
 end
 
 function M.nowOf(pawn)
-    return M.obj("/Script/Engine.Default__GameplayStatics"):GetTimeSeconds(pawn) or 0
+    if pawn == nil then return 0 end
+    local okLib, statics = pcall(M.obj, "/Script/Engine.Default__GameplayStatics")
+    if not okLib or statics == nil then return 0 end
+    local ok, now = pcall(function() return statics:GetTimeSeconds(pawn) end)
+    return ok and now or 0
 end
 
 return M
