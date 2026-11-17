@@ -277,3 +277,20 @@ jobs:
               assert not any('/tests/' in name or '/tools/' in name for name in names)
           print('Release ZIP contents validated.')
           PY
+
+      - name: Verify the published v1.6.4 bootstrap asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist-bootstrap
+          gh release download v1.6.4 --repo "$GITHUB_REPOSITORY" \
+            --pattern "pbz-auto-defense-v1.6.4.zip" --dir dist-bootstrap
+          archive="dist-bootstrap/pbz-auto-defense-v1.6.4.zip"
+          test -s "$archive"
+          actual_size=$(stat -c '%s' "$archive")
+          actual_sha=$(sha256sum "$archive" | awk '{print $1}')
+          test "$actual_size" = "285737"
+          test "$actual_sha" = "eb4745588ca311dc26e84680a2a3b1aa2ae338d0e73cd09a2b992296d221a705"
+          unzip -t "$archive"
+          echo "Published v1.6.4 bootstrap asset verified."
