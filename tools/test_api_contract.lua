@@ -2,7 +2,8 @@
 -- PBZModLoader game-api SDK 0.3.3 declares. Parameter order and enum values are
 -- the two things the game will not complain about when they are wrong - it just
 -- decides on the wrong numbers - so they are pinned here instead.
--- Authority: sdk/types/generated/PBZDeflectSystem.d.ts (see docs/SDK-API-COVERAGE.md).
+-- Authority: sdk/types/generated/PBZDeflectSystem.d.ts; the SDK's verification levels
+-- and what is still unproven are in docs/PBZ-GAME-API-REFERENCE.md (2.1, 9.3).
 local function read(path)
     local f = io.open(path, "rb")
     if not f then error("cannot read " .. path) end
@@ -44,8 +45,8 @@ for i = 1, 11 do
     end
 end
 eq(params[13], nil, "SendDeflectFrame has 11 parameters, so nothing follows the last")
--- the instrumentation is gone on purpose: it answered its question in two sessions
--- (SDK-API-COVERAGE 7.1-7.3) and a probe that outlives its question is just cost
+-- the instrumentation is gone on purpose: it answered what it could in two sessions
+-- (2026-11-18) and a probe that outlives its question is just cost
 for _, gone in ipairs({ "SENDARGS", "tl.probeSend", "tl.sendProbe", "tl.tmrProbe",
     "tl.tmrAction", "ACTN %s", "deflect hold:" }) do
     eq(src:find(gone, 1, true), nil, "the probe is gone: " .. gone)

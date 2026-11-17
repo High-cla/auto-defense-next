@@ -417,8 +417,17 @@ PBZ 游戏 API 与 UE4SS API 要分清：
 - 不把 USMAP 的外部内存地址用于运行时。
 - 不拿另一个游戏 build 的 SDK 覆盖当前构建的签名。
 
----
+### 9.3 仍未证实的字段（2026-11-18 两次实机会话后）
 
+下列三条**只有静态声明、没有实机读数**，用之前需要重新埋点（一次性、DEBUG 门控，不要常驻）：
+
+- `SGameInputComponent.IsHolding / GetHoldTime` 已在实机可读（返回布尔；未按住时 `GetHoldTime` = `-1`），但**看不看见本模组的注入**还没采到样本——旧探针只在注入窗口外提问，答案必然 `false`。想确认就在 `holdAsk` 的注入窗口内打一行。
+- `LGAAction_DurationBulletWithDeflectBase.SendFrameTimes / StartBulletTimes / EndBulletTimes` 的**单位**（动作秒 vs 帧号）未证实；与 `hit_times.txt` 能否对齐（`same clock` / `constant offset` / `differs`）决定学习表能否退役。
+- `DeflectSendFrame.AttackDirection.Yaw` 的实际范围未采到——已观测的样本全是弹丸类，四次读法都得 `0.00`；方向要从 action 的 `AttackDirection` 取，不是从 `DeflectReceiveFrame`（它根本没有这个字段）。
+
+> 教训：「探针会沉默」——没调用、被门挡住、答案一致三种沉默必须能在日志里区分，否则读数比没有读数更误导。
+
+---
 ## 10. 游戏更新后的核对流程
 
 1. 记录游戏 build 字符串、Steam build number、EXE SHA-256、引擎版本和 UE4SS/PBZModLoader 版本。

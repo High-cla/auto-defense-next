@@ -90,8 +90,9 @@ Versions are the `tl.VERSION` value in `Scripts/main.lua`; the release tag is `v
 
 - **移除三条 SDK 探针**：`tl.tmrNums/tmrJoin/tmrVerdict/tmrField/tmrYawOf/tmrKey/tmrAction`、`tl.sendProbe/tl.probeSend`、
   `tl.probeFrames` 里的源招式首见调用与 0.6 s 二次读取、`holdAsk` 的 `deflect hold:` 调试行、`onSendFrame` 的探针行与
-  `sendProbe.own/enemy` 计数、5 s `metrics:` 行的 `send=` 字段。它们只在 1.6.4 的两个实机会话里存在过，读数归档在
-  `docs/SDK-API-COVERAGE.md` §7.1–§7.3；未证实的三件事写进 §7.4（不重新引入常驻探针）。
+  `sendProbe.own/enemy` 计数、5 s `metrics:` 行的 `send=` 字段。它们只在 1.6.4 的两个实机会话里存在过；
+  仍未证实的三件事（注入窗口内的 `IsHolding`、帧时间数组的单位、`AttackDirection.Yaw` 的范围）写进
+  `docs/PBZ-GAME-API-REFERENCE.md` §9.3，不重新引入常驻探针。
 - `tools/test_api_contract.lua` 改为**负断言**：源码里不得再出现 `SENDARGS`、`tl.probeSend`、`tl.sendProbe`、
   `tl.tmrProbe`、`tl.tmrAction`、`ACTN %s`、`deflect hold:`；`onSendFrame` 第 2/3 参数改名 `_bullet`/`_rotation`，
   11 参形状不变，「收到但没读」用下划线前缀表达，不给 lint 增加警告。

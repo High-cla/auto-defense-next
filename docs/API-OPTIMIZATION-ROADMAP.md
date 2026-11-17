@@ -250,7 +250,7 @@ bash tools/run_all.sh
 
 ## 8. SDK 与反射资源
 
-开始使用新的游戏类型或函数前，先参阅 [PBZ SDK 与反射资源索引](PBZ-SDK-RESOURCES.md)；逐条核对与新增候选见 [SDK 覆盖审计](SDK-API-COVERAGE.md)。其中区分 PBZModLoader 的 TypeScript Game API SDK、UE4SS C++ SDK Generator 和 PBZ USMAP 映射文件，并标明它们分别适用于哪种 MOD 运行时。
+开始使用新的游戏类型或函数前，先参阅 [PBZ SDK 与反射资源索引](PBZ-SDK-RESOURCES.md)；逐条签名核对、验证等级与新增候选见 [PBZ 游戏反射 API 参考](PBZ-GAME-API-REFERENCE.md)（§2 验证等级、§9 候选与「不应直接执行」、§9.3 仍未证实的字段）。其中区分 PBZModLoader 的 TypeScript Game API SDK、UE4SS C++ SDK Generator 和 PBZ USMAP 映射文件，并标明它们分别适用于哪种 MOD 运行时。
 
 ## 9. 上游 API 参考
 

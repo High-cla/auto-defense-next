@@ -9,7 +9,7 @@
 -- file runs offline in the test suite. read() answers nil - "no answer" - wherever
 -- the game cannot be asked, which leaves the caller's key path in charge. Two
 -- reasons never to trust an answer blindly:
---   * the fields are reflection-generated, not call-verified (docs/SDK-API-COVERAGE.md)
+--   * the fields are reflection-generated, not call-verified (PBZ-GAME-API-REFERENCE 2.1)
 --   * this mod injects IA_Deflect itself, which makes the action look held
 local M = {}
 
