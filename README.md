@@ -88,13 +88,6 @@ git commit                   # pre-commit 自动跑同一道门禁
 
 装有 `lua5.4` 的机器上，门禁还会对 `Scripts/*.lua` 做 5.4 编译 smoke（`AD_REQUIRE_LUA54=1` 时缺失即失败）——游戏跑 5.4，离线测试跑 LuaJIT，这个差距必须被门禁自己盯着。
 
-## 已知限制
-
-- 本版只做过离线验证，游戏内行为与真实 p95 尚未测；`perf` 默认关。
-- 与 PBZPerfectDefense 的让位是**共约**（读取它的配置与启用状态），不是跨进程互斥：它若在我们判定之后改动，仍可能出现同一帧双方动作。
-- 数据快照不能原地重生成：生成器读取的 PBZAssist 脚本目录已不在本机，快照仍可用于运行时。
-- 时间线来自运行时的 `hit_times.txt`，属运行时状态、不进本仓库（本机约 2,500 条；`learned_hits.txt` 冷启动会再补一批，两个来源口径不同，不要相加）。全新安装从空表开始：`learn` 与数据层冷启动会逐步补齐，期间时间线闪避不生效，帧驱动的弹反应对照常工作；遇到未收录招式一律退回保守窗口并记录。
-
 ## 文档
 
 - [MODULES.md](docs/MODULES.md)：模块表、意图→规则表、`tl.api` / `tl.prunable` 契约、未搬项
@@ -189,16 +182,6 @@ The mod writes diagnostic files in its own mod folder:
 | `perf_log.txt` | Stage timings and tick percentiles when `perf=on` |
 
 The runtime also periodically reports dropped events, policy requests and denials, and Lua memory usage.
-
-## Compatibility and known limitations
-
-- **Game:** Phantom Blade Zero.
-- **Game data snapshot:** Steam build 26367565.
-- **Runtime:** UE4SS with Lua support.
-- **Optional menu integration:** PBZModsMenu and PBZModsMenuBridge.
-- **PBZPerfectDefense:** Integration uses a cooperative configuration/enabled-state hand-off. It is not mutual exclusion; both mods may still attempt an action in the same frame in a race condition.
-- On a fresh installation, locally learned timing data starts empty and accumulates during play when learning is enabled. Until a move has been learned, timeline-based dodge behavior may be unavailable for that move; frame-driven parry handling continues with a conservative fallback.
-- This version has passed offline tests and lint checks, but live-game behavior and real-world performance have not been verified. Performance logging is disabled by default.
 
 ## Development
 
