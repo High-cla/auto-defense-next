@@ -44,7 +44,7 @@
 
 ## 架构
 
-主运行时 `Scripts/main.lua`（约 4,950 行）+ 9 个边界模块，决策与执行分离：策略产出防守意图 → `ad_policy` 统一裁决 → `ad_input` 受控入口注入按键，按键/标签/解除都走同一道门。
+主运行时 `Scripts/main.lua`（约 5,050 行）+ 10 个边界模块，决策与执行分离：策略产出防守意图 → `ad_policy` 统一裁决 → `ad_input` 受控入口注入按键，按键/标签/解除都走同一道门。
 
 | 模块 | 职责 |
 |---|---|
@@ -53,6 +53,7 @@
 | `ad_policy` | 共享规则：意图 → 允许/拒绝 + 拒绝原因 |
 | `ad_input` | 受控入口：先问规则再执行，统计 ask/deny |
 | `ad_async` | 事件环（512、丢新不丢旧）+ 每 tick 预算的预热任务 |
+| `ad_compat` | 运行时兼容层：5.4 专有调用（`gc` 选项、`atan2`）与版本探测，缺失时调用点自行降级 |
 | `ad_json` | 严格扁平 JSON（菜单配置用） |
 | `menu_config` | 菜单字段映射、跨字段不变量、回读校验式落盘 |
 | `ad_menu_bridge` | 菜单保存名折叠的兼容垫片（镜像文件名，不重复实现写盘） |
@@ -77,14 +78,21 @@ bash tools/run_all.sh        # POLICY/ASYNC/TIMELINE/QUERY/MENU/BRIDGE/INTEGRATI
 git commit                   # pre-commit 自动跑同一道门禁
 ```
 
-`selene` 走 `selene.toml` + `ue4ss.yml`（自定义 std：lua51 + UE4SS 全局）。注意 selene 有 warning 时退出码也是 1，门禁读 `0 errors` 行。
+`selene` 走 `selene.toml` + `ue4ss.yml`（自定义 std：lua51 + UE4SS 全局），范围是 `Scripts/ tools/`。注意 selene 有 warning 时退出码也是 1，门禁读 `0 errors` 行。
+
+另有两道「文档/标准库说真话」的门：
+
+- `tools/check_std.py`：文档里出现的 UE4SS API 名必须都在 `ue4ss.yml` 的 std 里。
+- `tools/check_docs.py`：本文件与 `MODULES.md` 里的行数、模块数、版本、`tl.api` 条数必须等于磁盘上的实际值；断言数不写进文档，直接看门禁输出。
+
+装有 `lua5.4` 的机器上，门禁还会对 `Scripts/*.lua` 做 5.4 编译 smoke（`AD_REQUIRE_LUA54=1` 时缺失即失败）——游戏跑 5.4，离线测试跑 LuaJIT，这个差距必须被门禁自己盯着。
 
 ## 已知限制
 
 - 本版只做过离线验证，游戏内行为与真实 p95 尚未测；`perf` 默认关。
 - 与 PBZPerfectDefense 的让位是**共约**（读取它的配置与启用状态），不是跨进程互斥：它若在我们判定之后改动，仍可能出现同一帧双方动作。
 - 数据快照不能原地重生成：生成器读取的 PBZAssist 脚本目录已不在本机，快照仍可用于运行时。
-- 时间线来自运行时的 `hit_times.txt`，属运行时状态、不进本仓库（本机现有 2,683 条）。全新安装从空表开始：`learn` 与数据层冷启动会逐步补齐，期间时间线闪避不生效，帧驱动的弹反应对照常工作；遇到未收录招式一律退回保守窗口并记录。
+- 时间线来自运行时的 `hit_times.txt`，属运行时状态、不进本仓库（本机约 2,500 条；`learned_hits.txt` 冷启动会再补一批，两个来源口径不同，不要相加）。全新安装从空表开始：`learn` 与数据层冷启动会逐步补齐，期间时间线闪避不生效，帧驱动的弹反应对照常工作；遇到未收录招式一律退回保守窗口并记录。
 
 ## 文档
 
@@ -92,6 +100,7 @@ git commit                   # pre-commit 自动跑同一道门禁
 - [ASYNC-OBSERVABILITY.md](ASYNC-OBSERVABILITY.md)：事件环契约、事件表、sink 格式、perf 与错误通道
 - [MENU-INTEGRATION.md](MENU-INTEGRATION.md)：菜单字段、重启项、只读项、集成链
 - [AUDIT-2026-11-16.md](AUDIT-2026-11-16.md)：P0–P2 审计项的处置与延后理由
+- [AUDIT-2026-11-17.md](AUDIT-2026-11-17.md)：对照 API 文档的代码质量审计（P0×4/P1×9/P2×8）与本轮处置
 - [UPSTREAM-API-GUIDE.md](UPSTREAM-API-GUIDE.md)：UE4SS Lua API、PBZModLoader 反射 SDK、PBZ USMAP 工具链及本模组的 API 优化记录
 - [docs/UE4SS-LUA-API-REFERENCE.md](docs/UE4SS-LUA-API-REFERENCE.md)：UE4SS Lua 对象、线程、Hook、定时器、容器和性能 API 实战参考
 - [docs/PBZ-GAME-API-REFERENCE.md](docs/PBZ-GAME-API-REFERENCE.md)：PBZ DeflectComponent、AbilityInputComponent、Enhanced Input 与 SDK 验证等级

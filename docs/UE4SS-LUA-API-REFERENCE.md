@@ -49,6 +49,16 @@ local Policy = dofile(MOD_DIR .. "Scripts/ad_policy.lua")
 
 UE4SS 支持热重载 Lua MOD。重载前应确保旧的计时器、Hook、回调和持有的对象引用不会继续产生副作用；不要把“脚本文件被重新执行”误认为所有 UE 对象、输入状态和外部 Hook 自动清理完成。
 
+### 1.1 运行时 Lua 版本与离线门禁的差距
+
+游戏内的 UE4SS 运行 **Lua 5.4**，而本仓库的离线门禁跑 **LuaJIT（Lua 5.1）**。这不是学术差别：`collectgarbage("generational")`、`math.atan(y, x)` 这类 5.4 专有调用在 5.1 下会抛错，而离线测试覆盖不到。
+
+- 启动日志打一行 `runtime: <_VERSION> / <jit.version> / ad_compat`：实机日志本身就能证明目标版本。1.6.4 及以前只能靠间接证据（`loaded v...` 出现在 `collectgarbage("generational")` 之后，说明运行时接受了 5.4 选项）。
+- 5.4 专有调用统一收进 `Scripts/ad_compat.lua`（`gc(mode)` / `atan(y, x)` / `version()` / `hasJit()`），调用方不写裸 5.4 API，且模块缺失时调用点仍能降级。
+- 门禁在装有 `lua5.4` 的机器上对 `Scripts/*.lua` 做编译 smoke；CI 用 `AD_REQUIRE_LUA54=1` 把「缺少 lua5.4」算成失败。
+
+要断言某段代码在 5.4 下的行为，必须真的用 5.4 跑一遍；LuaJIT 下通过只代表 5.1 通过。
+
 ## 2. 对象查询与缓存
 
 ### 2.1 StaticFindObject 与实例查找的区别
@@ -255,6 +265,8 @@ UE4SS 的 Delayed Actions API 在游戏线程执行，返回当前模组所属�
 - 不可用时用 `LoopInGameThreadWithDelay(10, callback)` 等兼容路径。
 - 返回的 handle 要保存；重启/替换循环前取消旧 handle。
 - 仍应保留 generation/token 检查，防止已经排入队列的旧回调在切换边界执行。
+- **成功判据只有一条：调用没有抛错就算已排程，handle 可能是 nil。** 用 `handle ~= nil` 判成功会把「句柄不可用的可用 API」误判成没排程；两条路径（帧/毫秒）的判据必须一致，否则一条会「成功回退」到另一条，行为随 installation 变化。
+- 「已排程」不等于「在跑」：排程成功后记 `loopVerifyAt = now + 2`，2 s 内没有任何 tick 就换另一条路径并记日志。注意看门狗本身跑在被监视的循环里 —— 完全静默的循环无法自愈，只能靠人工/热键触发的重试路径。
 
 不要简单把 10 ms timer 换成“每帧”便宣称提升 FPS。帧同步主要消除帧间重复采样和不必要唤醒；实际收益需要用同场景的帧间隔、p95/p99、tick 成本和 hitch 数据测量。1 帧回调仍然会消耗当前帧预算。
 
@@ -286,9 +298,10 @@ local function startLoop(tick)
         return false
     end
 
+    -- 判据：不抛错 = 已排程（handle 可能为 nil）；是否真的在跑另由 tick 验证
     if EngineTickAvailable and type(LoopInGameThreadAfterFrames) == "function" then
         local ok, handle = pcall(LoopInGameThreadAfterFrames, 1, guardedTick)
-        if ok and handle ~= nil then
+        if ok then
             loopHandle = handle
             return "frame"
         end
@@ -296,7 +309,7 @@ local function startLoop(tick)
 
     if type(LoopInGameThreadWithDelay) == "function" then
         local ok, handle = pcall(LoopInGameThreadWithDelay, 10, guardedTick)
-        if ok and handle ~= nil then
+        if ok then
             loopHandle = handle
             return "timer"
         end
@@ -305,7 +318,7 @@ local function startLoop(tick)
 end
 ```
 
-本模板为生命周期说明；循环回调是否由返回值停止应按所安装 UE4SS 版本的 Delayed Actions 实现确认，不要用返回 true/false 代替明确的 `CancelDelayedAction` 清理。
+本模板为生命周期说明；循环回调是否由返回值停止应按所安装 UE4SS 版本的 Delayed Actions 实现确认，不要用返回 true/false 代替明确的 `CancelDelayedAction` 清理。模板的「不抛错即已排程」与 `Scripts/main.lua` 的 `tl.start` 一致：两条路径走同一个 `schedule(kind)`，失败时把两条路径的原因都写进日志（`main loop scheduler failed: frame (...) ; timer (...)`），不再出现「一条路径报不可用、另一条也静默」的情况。
 
 ### 4.5 旧接口
 

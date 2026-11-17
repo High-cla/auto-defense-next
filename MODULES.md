@@ -6,15 +6,16 @@ is in `AUDIT-2026-11-16.md`; behaviour changes are listed there, not here.
 
 | File | Lines | Owns |
 | --- | ---: | --- |
-| `Scripts/main.lua` | 4854 | hooks, tick orchestration, timeline decisions, parry/dodge mechanics, ledger, perf, data loader |
-| `Scripts/ad_query.lua` | 107 | read-only game queries: `valid/name/unwrap/num/prop/baseName/obj/tag/tagLibrary/component/ascOf/nowOf` (log injected) |
+| `Scripts/main.lua` | 5089 | hooks, tick orchestration, the decision chain (`tl.decide`), parry/dodge mechanics, ledger, perf, data loader |
+| `Scripts/ad_query.lua` | 176 | read-only game queries: `valid/name/unwrap/num/prop/baseName/obj/tag/tagLibrary/component/ascOf/nowOf` (log injected); `tag` memoised, `baseName` is the one name rule |
+| `Scripts/ad_compat.lua` | 61 | the runtime compat layer: `gc(mode)` / `atan(y, x)` / `version()` / `hasJit()` — the two Lua-5.4-only calls live here and nowhere else |
 | `Scripts/ad_timeline.lua` | 60 | the learned timeline table **and** its count (`table/count/put/add/addRow/removeRow/get/recount/each`) |
 | `Scripts/ad_policy.lua` | 47 | the shared rules: `ask(intent)` → allow/deny + reason, `who()`, per-reason counters |
 | `Scripts/ad_input.lua` | 75 | the controlled entry: `pressGuard/releaseGuard/endStance/tag/inject` — asks the rules, then calls the registered mechanic; `stats()` |
 | `Scripts/ad_async.lua` | 104 | in-process read-only event bus + budgeted warm-up queue |
-| `Scripts/ad_json.lua` / `menu_config.lua` | 123 / 246 | strict flat JSON; native Mods Menu adapter (invariants, read-back, unknown-key naming) |
+| `Scripts/ad_json.lua` / `Scripts/menu_config.lua` | 123 / 246 | strict flat JSON; native Mods Menu adapter (invariants, read-back, unknown-key naming) |
 | `Scripts/ad_menu_bridge.lua` | 158 | the Mods Menu save-name shim: mirrors the menu's folded `pending-`/`saved-` names into the spelling the bridge watches and back; never writes the config |
-| `Scripts/toast.lua` | 80 | the toast notifications (UE4SS module path, loaded with `require`) |
+| `Scripts/toast.lua` | 208 | the toast notifications: one Delayed Action per show (retriggerable where available), handle kept and cancelled; never a resident loop |
 | `data/ad_data.lua` | 1.16 MB | generated game-data snapshot (the runtime data layer), build=26367565. Regenerating it also rewrites `data/ad_data_meta.txt`, but the source (`Mods/PBZAssist/Scripts/enemy_data.lua`) is gone as of 2026-11-16: the snapshot is frozen and still valid, a new one needs a PBZAssist install. |
 | `tools/out/ad_data_core.lua` + `ad_data_meta.txt` | 199 KB | reduced snapshot and its build/count meta for tooling and audit only - not loaded at runtime |
 
@@ -35,9 +36,22 @@ Installation is `pcall`-guarded: a failure leaves the plain functions in place, 
 
 ## Contract notes
 
-- **Public surface**: `tl.api` lists the 23 names other code or tests may use; the count is
+- **Public surface**: `tl.api` lists the 24 names other code or tests may use; the count is
   logged at startup (`tl api: N public names of M fields`) so a growing API is visible.
   Everything else on `tl` is internal and may be renamed.
+- **Test seams** (only inside a copy carrying the `.ad-menu-test-only` marker):
+  `_G.__TL/__HK/__S`, `_G.__DECIDE` (= `tl.decide(p, deflect, input, now)`),
+  `_G.__CHECK_RELEASE`, `_G.__RUNTIME` (`version`/`jit`/`compat`). A normal install
+  exposes no globals.
+- **Error channel**: every action call site goes through `tl.try(what, fn, ...)`; a failure is
+  logged the first 3 times per `what` (traceback on the first) and emitted as `error` on the
+  bus. Read probes keep plain `pcall` on purpose — they are "try to read, fall back", not actions.
+- **Hot path**: named `RT.*` accessors instead of `pcall(function() ... end)`, one reusable
+  `RT.out` frame table, constant kind tables in `RT`, one name rule (`RT.bname` →
+  `Q.baseName`). Nothing in the per-tick path allocates a closure.
+- **Hooks**: every `RegisterHook` id is kept in `tl.hookIds` via `RT.rememberHook`;
+  `RT.unhook(key)` / `RT.unhookAll()` call `UnregisterHook` (a nil id means the API returned
+  none — it is documented as "cannot be removed later", not silently forgotten).
 - **Growable caches** register in `tl.prunable`; `tl.pruneHandles()` is the only place that
   clears them (`parried`, `dodged`, `warned` today).
 - Plain dot calls (`bus.drain(16)`, `warm.step(1)`): a colon call passes the table as the
@@ -49,10 +63,11 @@ Installation is `pcall`-guarded: a failure leaves the plain functions in place, 
 
 ## Verification
 
-`bash tools/run_all.sh` → POLICY 35, ASYNC 46, TIMELINE 18, MENU 69, BRIDGE 115,
-INTEGRATION 44 assertions; `selene` 0 errors / 3 warnings (three documented unwired
-diagnostics). `main.lua` SHA256 `37317350163613d7af9ac47abddd98173f854344972c82e8f2f10c66ea6fc777`.
-The repository's pre-commit hook runs the same gate.
+`bash tools/run_all.sh` is the single source of truth for counts: it prints one line per suite
+(with its assertion count), the python suites, `check_std`, `check_docs`, the optional Lua 5.4
+compile smoke and the `selene` verdict. This file deliberately no longer copies those numbers or
+a file hash — they rotted every release, and `tools/check_docs.py` now fails the gate when any
+number stated here disagrees with the disk. The repository's pre-commit hook runs the same gate.
 
 ## Not moved yet
 
