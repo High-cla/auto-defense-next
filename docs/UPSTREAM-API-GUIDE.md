@@ -13,6 +13,19 @@
 | [PBZ SDK 与反射资源索引](PBZ-SDK-RESOURCES.md) | 区分 PBZ USMAP、PBZModLoader TypeScript Game API SDK、UE4SS C++ SDK Generator；包含 developer ZIP 下载和安装方法 | 为 Lua/TS/C++ MOD 选择正确的 API 类型资源 |
 | [API 优化路线图](API-OPTIMIZATION-ROADMAP.md) | 当前代码 API 映射、已完成优化、候选 API、风险等级、性能 A/B 方法和实机验收标准 | 决定下一项性能/稳定性改进 |
 
+## 工程开发手册 / Engineering guides
+
+下列 P0 文档描述项目自身的实现与维护方式，与上游 API 字典互补：
+
+| 文档 | 内容 | 适用场景 |
+|---|---|---|
+| [项目架构](ARCHITECTURE.md) | 系统边界、模块关系、初始化顺序、每帧数据流、决策/副作用边界、持久化映射 | 初次接手项目或修改模块边界 |
+| [防守状态机](DEFLECT-STATE-MACHINE.md) | ReceiveFrame 候选、红招先闪避、普通命中弹反、时间轴闪避、guard hold/release 和状态清理 | 修改命中判定、时机、输入优先级 |
+| [运行时生命周期](RUNTIME-LIFECYCLE.md) | 主循环调度、Delayed Actions、Hook 注册与当前注销缺口、Pawn/组件寿命、暂停恢复和错误隔离 | 排查循环、Hook、对象失效和重载问题 |
+| [配置参考](CONFIGURATION-REFERENCE.md) | 41 个字段的中英说明、类型、默认值、取值范围、生效时机、持久化和 TXT→JSON 迁移 | 修改配置 schema 或排查设置未生效 |
+
+推荐先读项目架构，再读防守状态机和运行时生命周期；需要更改菜单或 JSON 时，配合配置参考与 [MENU-INTEGRATION.md](MENU-INTEGRATION.md)。
+
 ## 推荐阅读路径
 
 1. 先读 [UE4SS Lua API 实战参考](UE4SS-LUA-API-REFERENCE.md)，理解当前运行时的对象、线程和 Hook 语义。
