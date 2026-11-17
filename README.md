@@ -90,6 +90,7 @@ git commit                   # pre-commit 自动跑同一道门禁
 - [ASYNC-OBSERVABILITY.md](ASYNC-OBSERVABILITY.md)：事件环契约、事件表、sink 格式、perf 与错误通道
 - [MENU-INTEGRATION.md](MENU-INTEGRATION.md)：菜单字段、重启项、只读项、集成链
 - [AUDIT-2026-11-16.md](AUDIT-2026-11-16.md)：P0–P2 审计项的处置与延后理由
+- [UPSTREAM-API-GUIDE.md](UPSTREAM-API-GUIDE.md)：UE4SS Lua API、PBZModLoader 反射 SDK、PBZ USMAP 工具链及本模组的 API 优化记录
 
 ## License
 
@@ -181,7 +182,13 @@ Run the offline test and lint suite from the repository root:
 bash tools/run_all.sh
 ```
 
-This runs the policy, async, timeline, menu-config, and integration tests. If `selene` is installed, it also lints the Lua scripts. The test suite does not launch the game or validate in-game behavior.
+This runs the policy, async, timeline, query, menu-config, menu-bridge, and integration tests. If `selene` is installed, it also lints the Lua scripts. The test suite does not launch the game or validate in-game behavior.
+
+## Developer documentation
+
+- [UPSTREAM-API-GUIDE.md](UPSTREAM-API-GUIDE.md): UE4SS Lua APIs, PBZModLoader reflection SDK, PBZ USMAP tooling, and the API-driven optimization notes.
+- [MODULES.md](MODULES.md): module boundaries and the public runtime surface.
+- [MENU-INTEGRATION.md](MENU-INTEGRATION.md): native menu configuration and compatibility boundaries.
 
 ## License
 
