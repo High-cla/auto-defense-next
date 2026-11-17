@@ -36,6 +36,7 @@ flowchart TD
     INPUT --> MAIN
     ASYNC["Scripts/ad_async.lua<br/>event ring + warm-up queue"] --> MAIN
     COMPAT["Scripts/ad_compat.lua<br/>Lua version adapters"] --> MAIN
+    INPUTSTATE["Scripts/ad_inputstate.lua<br/>game hold answer, key fallback"] --> MAIN
     TOAST["Scripts/toast.lua"] --> MAIN
     MAIN --> GAME["PBZ gameplay objects / hooks / input"]
     MAIN --> LOGS["logs + decision ledger + perf"]
@@ -50,6 +51,7 @@ flowchart TD
 | Scripts/ad_timeline.lua | 学习时间轴表及其 key count；put/add/addRow/removeRow/recount | 被其他模块绕过 API 直接改表并维护计数 |
 | Scripts/ad_policy.lua | 纯规则判断：intent → allow/deny + reason；记录拒绝统计 | 直接调用游戏对象或执行输入 |
 | Scripts/ad_input.lua | guard press/release、stance end、tag、input injection 的统一门 | 自己重新实现防守算法；绕过 policy 直接操作游戏 |
+| Scripts/ad_inputstate.lua | 读游戏自己的 hold 状态（`IsHolding/GetHoldTime`）并按注入窗口裁定是否采信；失败一律返回 nil | 缓存过期状态、把本模组注入的按键当成玩家按住、从 hook 里写游戏状态 |
 | Scripts/ad_async.lua | 只读事件环和预算化 warm-up 队列 | 在 hook 里直接做无界 IO/计算或改变防守判断 |
 | Scripts/ad_json.lua | 受限扁平 JSON 编解码 | 接受任意嵌套 JSON 或承担 schema policy |
 | Scripts/menu_config.lua | 配置 schema、校验、单位映射、持久化、热应用与 pending restart 状态 | 控制战斗算法或取代 Bridge 的菜单写入责任 |

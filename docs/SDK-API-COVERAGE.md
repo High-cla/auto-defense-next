@@ -56,10 +56,10 @@
 
 | 候选 | SDK 声明 | 能替掉 AD 的什么 | 前置/风险 |
 |---|---|---|---|
-| `SendFrameTimes / StartBulletTimes / EndBulletTimes` | PBZDeflectSystem.d.ts:173-175 | `data/ad_data.lua` + `hit_times.txt` + `learned_hits.txt` 的离线学习（运行时真值） | 数组单位（动作秒 vs 帧号）未验证 |
+| `SendFrameTimes / StartBulletTimes / EndBulletTimes` | PBZDeflectSystem.d.ts:173-175 | `data/ad_data.lua` + `hit_times.txt` + `learned_hits.txt` 的离线学习（运行时真值） | 数组单位（动作秒 vs 帧号）未验证；**已落地为 DEBUG 探针（§7）** |
 | `PreHitPointDuration / RuntimePreHitPointDuration` | :169-170 | parry lead 的「45% 猜测」换成真值 | 两字段差异需实机 |
 | `BulletRepetitions / BulletDuration` | :167-168 | `flurry_guard`、连发判断 | 只读 |
-| `SGameInputComponent.IsHolding / GetHoldTime / HoldingInputs` | SGameInputSystem.d.ts:299-302 | `IsInputKeyDown + QueryKeysMappedToAction` 反推「键还按着」 | 取法 `pawn["Ability Input Component"].SGameInput` |
+| `SGameInputComponent.IsHolding / GetHoldTime / HoldingInputs` | SGameInputSystem.d.ts:299-302 | `IsInputKeyDown + QueryKeysMappedToAction` 反推「键还按着」 | 取法 `pawn["Ability Input Component"].SGameInput`；**IsHolding/GetHoldTime 已落地，键判保留为回落（§7）** |
 | `DeflectComponent.GetSelfResultData(Handle, DeflectResult, OutResultData)` | PBZDeflectSystem.d.ts:22 | ledger「结果」列靠血条推测 | Out 参数与 tag 取值未验证 |
 | `SendFrames: TMap<number, DeflectSendFrame>` | :7 | 发送侧帧（`HitGameTime/Receivers/IgnoredActors/Paused`） | 只读；是「已发出」不是「会命中」 |
 | `AbilityInputComponent.InActionPhase / ActionPhase` | SGameInputSystem.d.ts:42-43 | `busy_skip` / montage 状态 | 时序语义未验证 |
@@ -82,19 +82,20 @@
 
 ## 6. 已落地的门禁
 
-`tools/test_api_contract.lua`（34 断言，进 `tools/run_all.sh` 与 CI）把三件「错了也不报错」的契约钉死：
+`tools/test_api_contract.lua`（36 断言，进 `tools/run_all.sh` 与 CI）把三件「错了也不报错」的契约钉死：
 
-1. `onSendFrame` 的 11 个参数顺序与 `SendDeflectFrame` 一致（占位符必须落在 2/3/4/5/8/9 位）；
+1. `onSendFrame` 的 11 个参数顺序与 `SendDeflectFrame` 一致（2/3 位命名为 `bullet`/`rotation` 供调试探针读，其余非 SDK 位必须是占位符）；
 2. `tl.BULLET_TYPES` 的 0..5 名称与 `EDeflectBulletType` 枚举一致；
 3. `GetNearestValidReceivedFrame` 仍是 5 参，角度 360.0、当前 handle 哨兵 `-1`。
 
-## 7. 待决定（尚未实施，纯建议）
+## 7. 三条建议已落地（只读优先，待实机确认）
 
-| # | 建议 | 收益 | 成本/风险 | 验证方法 |
-|---|---|---|---|---|
-| 1 | 运行时的帧时间探针：读 `SendFrameTimes / PreHitPointDuration` 与 `data/ad_data.lua` 逐条比对 | 若吻合，`LEARN` + `learned_hits.txt` 这套子系统可退役（本仓库最大复杂度来源之一） | 只读探针，低风险；需要一局实机 | 探针日志与 `hit_times.txt` 对齐率 |
-| 2 | 用 `SGameInputComponent.IsHolding(IA_Deflect) / GetHoldTime` 替换按键推断 | 收尾准确性（`releaseHeldKey/standDown`） | 只读替换，但要先对比一周 ledger | 两种来源在同一局的差异计数 |
-| 3 | `Debug` 时打印 `Bullet` 与 `AttackRotation.Yaw` 的实际类型/范围 | 让参数错位一眼可辨（第 6 节已挡顺序，类型仍未验证） | 只改 DEBUG 日志 | 实机日志抽样 |
+| # | 实现 | 代码位置 | 判据 / 仍需实机确认的部分 |
+|---|---|---|---|
+| 1 | 帧时间真值探针：DEBUG 下每个招式类读一次 `SendFrameTimes` / `PreHitPointDuration`，与 `hit_times.txt`+`ad_data.lua` 的时间线逐项相减，输出 `TMR … -> same clock / constant offset / count differs / differs` | `Scripts/main.lua` 的 `tl.tmrNums/tmrProbe`，由帧扫描（`tl.probeFrames`）在源招式首次出现时调用 | 单位（动作秒 vs 帧号）仍未证实：`constant offset` 才说明两套时钟可换算，`differs` 说明不能直接替换学习表 |
+| 2 | `IsHolding(IA_Deflect)` / `GetHoldTime` 接在 `deflectKeyHeld()` 之前，键判保留为回落 | 新模块 `Scripts/ad_inputstate.lua`（读取器注入、可离线测）+ `tl.holdAsk(keyHeld, pawn)` | 组件字段名 `SGameInput` 是否可读、`IsHolding` 是否把注入算作按住——探针行 `deflect hold: game=… keys=… -> …`（DEBUG，每秒最多一行）直接给出差异 |
+| 3 | `onSendFrame` 第 2/3 参数命名并在 DEBUG 下打印类型与 `AttackRotation.Yaw` 范围 | `tl.probeSend`（前 3 次 + 每 600 次一行 `SENDARGS …`），契约由 `tools/test_api_contract.lua` 钉住 | `yawrange` 的实际读数（是否 0..360、是否随朝向变化）决定下一轮能否用它判定「背对 / 绕后」 |
 
-> 三条都需要实机数据才能判定，按「先度量后优化」的原则留给下一轮；当前代码**未采用任何新增 SDK 符号**
-> （`grep -n 'IsHolding|GetHoldTime|SendFrameTimes|PreHitPointDuration|SGameInput|GetSelfResultData' Scripts/*.lua` = 0 命中）。
+> 三条都只读，不改决策：游戏答不上来（无组件、无字段、调用抛错、返回非布尔）一律返回 nil 并走原键判，
+> 每种原因只记一行日志。**尚未进实机**，因此 `LEARN` + `learned_hits.txt` 的退役与
+> `IsHolding` 的全面采信都保持「有证据再改」的状态。

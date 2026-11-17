@@ -6,12 +6,13 @@ is in `AUDIT-2026-11-16.md`; behaviour changes are listed there, not here.
 
 | File | Lines | Owns |
 | --- | ---: | --- |
-| `Scripts/main.lua` | 5181 | hooks, tick orchestration, the decision chain (`tl.decide`), parry/dodge mechanics, ledger, perf, data loader |
+| `Scripts/main.lua` | 5352 | hooks, tick orchestration, the decision chain (`tl.decide`), parry/dodge mechanics, ledger, perf, data loader |
 | `Scripts/ad_query.lua` | 176 | read-only game queries: `valid/name/unwrap/num/prop/baseName/obj/tag/tagLibrary/component/ascOf/nowOf` (log injected); `tag` memoised, `baseName` is the one name rule |
 | `Scripts/ad_compat.lua` | 61 | the runtime compat layer: `gc(mode)` / `atan(y, x)` / `version()` / `hasJit()` — the two Lua-5.4-only calls live here and nowhere else |
 | `Scripts/ad_timeline.lua` | 60 | the learned timeline table **and** its count (`table/count/put/add/addRow/removeRow/get/recount/each`) |
 | `Scripts/ad_policy.lua` | 47 | the shared rules: `ask(intent)` → allow/deny + reason, `who()`, per-reason counters |
 | `Scripts/ad_input.lua` | 75 | the controlled entry: `pressGuard/releaseGuard/endStance/tag/inject` — asks the rules, then calls the registered mechanic; `stats()` |
+| `Scripts/ad_inputstate.lua` | 90 | the game's own hold answer: `IsHolding`/`GetHoldTime` through the pawn's input component, `pick(held, keyHeld, injecting)` precedence, `read()` answers nil instead of guessing; readers injected, so the file has no game API and runs offline |
 | `Scripts/ad_async.lua` | 104 | in-process read-only event bus + budgeted warm-up queue |
 | `Scripts/ad_json.lua` / `Scripts/menu_config.lua` | 123 / 246 | strict flat JSON; native Mods Menu adapter (invariants, read-back, unknown-key naming) |
 | `Scripts/ad_menu_bridge.lua` | 158 | the Mods Menu save-name shim: mirrors the menu's folded `pending-`/`saved-` names into the spelling the bridge watches and back; never writes the config |
@@ -36,7 +37,7 @@ Installation is `pcall`-guarded: a failure leaves the plain functions in place, 
 
 ## Contract notes
 
-- **Public surface**: `tl.api` lists the 25 names other code or tests may use; the count is
+- **Public surface**: `tl.api` lists the 26 names other code or tests may use; the count is
   logged at startup (`tl api: N public names of M fields`) so a growing API is visible.
   Everything else on `tl` is internal and may be renamed.
 - **Test seams** (only inside a copy carrying the `.ad-menu-test-only` marker):
