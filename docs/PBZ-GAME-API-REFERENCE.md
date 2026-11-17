@@ -12,6 +12,8 @@
 
 PBZModLoader 的 ue、puerts 模块不能直接从 UE4SS Lua 中调用。SDK TypeScript 声明也不是 Lua 库。PBZ USMAP 是反射数据格式和采集工具，不是运行时战斗 API。
 
+SDK 的完整下载入口、离线 npm 安装方法、UE4SS C++ SDK Generator 与 USMAP 的区别，见 [PBZ SDK 与反射资源索引](PBZ-SDK-RESOURCES.md)。当前 0.3.3 类型声明随 PBZModLoader developer ZIP 提供，不能用玩家版 win64 ZIP 代替。
+
 ## 2. SDK 版本、覆盖和验证等级
 
 当前可读的 PBZModLoader SDK README 标示版本 0.3.3，目标 Steam Win64 游戏构建为 CL-302256_JKS-17280，引擎版本 5.7.4-302256+b7c82f11b864，EXE SHA-256：
