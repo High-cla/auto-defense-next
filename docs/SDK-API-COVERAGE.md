@@ -82,9 +82,9 @@
 
 ## 6. 已落地的门禁
 
-`tools/test_api_contract.lua`（36 断言，进 `tools/run_all.sh` 与 CI）把三件「错了也不报错」的契约钉死：
+`tools/test_api_contract.lua`（41 断言，进 `tools/run_all.sh` 与 CI）把三件「错了也不报错」的契约钉死：
 
-1. `onSendFrame` 的 11 个参数顺序与 `SendDeflectFrame` 一致（2/3 位命名为 `bullet`/`rotation` 供调试探针读，其余非 SDK 位必须是占位符）；
+1. `onSendFrame` 的 11 个参数顺序与 `SendDeflectFrame` 一致（非 SDK 位必须是占位符；本次改动后第 2/3 位也改成 `_bullet`/`_rotation`——收到但不读；同一文件另有负断言，禁止探针日志与 `tl.tmr*/sendProbe` 复活）；
 2. `tl.BULLET_TYPES` 的 0..5 名称与 `EDeflectBulletType` 枚举一致；
 3. `GetNearestValidReceivedFrame` 仍是 5 参，角度 360.0、当前 handle 哨兵 `-1`。
 
