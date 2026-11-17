@@ -91,6 +91,10 @@ git commit                   # pre-commit 自动跑同一道门禁
 - [MENU-INTEGRATION.md](MENU-INTEGRATION.md)：菜单字段、重启项、只读项、集成链
 - [AUDIT-2026-11-16.md](AUDIT-2026-11-16.md)：P0–P2 审计项的处置与延后理由
 - [UPSTREAM-API-GUIDE.md](UPSTREAM-API-GUIDE.md)：UE4SS Lua API、PBZModLoader 反射 SDK、PBZ USMAP 工具链及本模组的 API 优化记录
+- [docs/UE4SS-LUA-API-REFERENCE.md](docs/UE4SS-LUA-API-REFERENCE.md)：UE4SS Lua 对象、线程、Hook、定时器、容器和性能 API 实战参考
+- [docs/PBZ-GAME-API-REFERENCE.md](docs/PBZ-GAME-API-REFERENCE.md)：PBZ DeflectComponent、AbilityInputComponent、Enhanced Input 与 SDK 验证等级
+- [docs/PBZ-USMAP-TOOLCHAIN.md](docs/PBZ-USMAP-TOOLCHAIN.md)：PBZ USMAP live/offline 采集、映射格式、合并和质量检查
+- [docs/API-OPTIMIZATION-ROADMAP.md](docs/API-OPTIMIZATION-ROADMAP.md)：已完成优化、候选 API 风险分级、性能 A/B 与实机验收
 
 ## License
 
@@ -186,7 +190,11 @@ This runs the policy, async, timeline, query, menu-config, menu-bridge, and inte
 
 ## Developer documentation
 
-- [UPSTREAM-API-GUIDE.md](UPSTREAM-API-GUIDE.md): UE4SS Lua APIs, PBZModLoader reflection SDK, PBZ USMAP tooling, and the API-driven optimization notes.
+- [UPSTREAM-API-GUIDE.md](UPSTREAM-API-GUIDE.md): index and integration overview for all upstream API references.
+- [docs/UE4SS-LUA-API-REFERENCE.md](docs/UE4SS-LUA-API-REFERENCE.md): UObject queries, game-thread scheduling, hooks, containers, input, lifecycle, and Lua performance practices.
+- [docs/PBZ-GAME-API-REFERENCE.md](docs/PBZ-GAME-API-REFERENCE.md): PBZ DeflectComponent, AbilityInputComponent, Enhanced Input, SDK coverage, and verification levels.
+- [docs/PBZ-USMAP-TOOLCHAIN.md](docs/PBZ-USMAP-TOOLCHAIN.md): live/offline type capture, USMAP format, merging, quality checks, and build workflow.
+- [docs/API-OPTIMIZATION-ROADMAP.md](docs/API-OPTIMIZATION-ROADMAP.md): implemented changes, API candidates, risk levels, A/B measurement, and in-game validation.
 - [MODULES.md](MODULES.md): module boundaries and the public runtime surface.
 - [MENU-INTEGRATION.md](MENU-INTEGRATION.md): native menu configuration and compatibility boundaries.
 
