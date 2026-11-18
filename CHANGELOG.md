@@ -2,6 +2,17 @@
 
 Versions are the `tl.VERSION` value in `Scripts/main.lua`; the release tag is `v<version>`.
 
+## 1.6.7 — 2026-11-18
+
+### 别离残钩反制与蓝色护盾反制
+
+两个新功能都默认关闭：从 1.6.6 升级上来、不动菜单里的新选项时，行为与 1.6.6 完全一致；旧配置 JSON 缺这四个键时按默认值补齐，无需手工迁移。四个键都热应用（`restart=false`），字段名 `hookCounter` / `hookCounterShachi` / `shieldCounter` / `shieldCounterRange`。
+
+- **别离残钩黑光反制**（`hook_counter`，默认 `off`）：手持别离残钩（武器名含 `DualHook`）且杀气不低于 `hook_counter_shachi`（百分比，默认 37）时，黑光（`PowerAttack`）判定不再闪避/格挡，改为「按住格挡＋三角形」的反制。`off` 时黑光仍按 `black_flash` 设置处理。
+- **蓝色护盾反制**（`shield_counter`，默认 `off`，**测试中**）：`shield_counter_range`（公分，默认 1500）内有带蓝色护盾（`AttributeSetBase.Shield > 0`）的敌人时，自动切到别离残钩并对它的可格挡攻击放反制；附近有这种敌人时不会把别离残钩切走。`off` 时不扫描、不换武器，行为与 1.6.6 一致。
+- 设置清单 42 → 46 项（可编辑 40 → 44，只读仍 2）；菜单描述符、配置参考、菜单集成、模块/架构文档与 README 中英文功能条目同步。
+- 已知边界（本次未在实机验证）：反制按住格挡期间，逐帧的接帧路径仍可能为同一记命中放出一记格挡按键；这版只记录 `counter: a guard tap went out inside the counter window`，不压制它——在没有实机证据前不改 1.6.6 的帧路径。它是否影响反制成功率，需要一局日志确认。
+
 ## 1.6.6 — 2026-11-18
 
 ### 缺帧冷启动保护与参考数据层

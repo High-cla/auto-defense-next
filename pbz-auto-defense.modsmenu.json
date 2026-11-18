@@ -7,7 +7,7 @@
     "en": "Lua defense runtime with native Mods Menu config. Restart-only fields are marked. Free-text fields are read-only.",
     "zh-Hans": "保留 Lua 防守运行时，接入原生模组菜单配置。重启项已标注；两个自由文本项只读。"
   },
-  "version": "1.6.6",
+  "version": "1.6.7",
   "settings": [
     {
       "key": "perfect",
@@ -59,6 +59,76 @@
         "dodge",
         "parry"
       ]
+    },
+    {
+      "key": "hook_counter",
+      "type": "choice",
+      "label": {
+        "en": "hook_counter",
+        "zh-Hans": "别离残钩反制"
+      },
+      "default": "off",
+      "restart": false,
+      "help": {
+        "en": "Off leaves every behavior exactly as before. On: holding a DualHook weapon (别离残钩) with shachi at or above hook_counter_shachi turns a black-flash (PowerAttack) check into block-and-triangle counter instead of dodge or parry.",
+        "zh-Hans": "关闭时行为与升级前完全一致。开启后：手持别离残钩（DualHook）且杀气不低于 hook_counter_shachi 时，黑光（PowerAttack）判定改为「按住格挡＋三角形」反制，不再按黑闪设置闪避/弹反。"
+      },
+      "options": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "key": "hook_counter_shachi",
+      "type": "number",
+      "label": {
+        "en": "hook_counter_shachi",
+        "zh-Hans": "反制杀气阈值（%）"
+      },
+      "default": 37,
+      "restart": false,
+      "help": {
+        "en": "Shachi percentage the hook counter needs. Read only while hook_counter is on; below it a black flash still follows the black_flash setting.",
+        "zh-Hans": "别离残钩反制所需的杀气百分比。仅在 hook_counter 开启时读取；低于该值时黑光仍按 black_flash 设置处理。"
+      },
+      "min": 0,
+      "max": 100,
+      "step": 1
+    },
+    {
+      "key": "shield_counter",
+      "type": "choice",
+      "label": {
+        "en": "shield_counter",
+        "zh-Hans": "蓝色护盾反制"
+      },
+      "default": "off",
+      "restart": false,
+      "help": {
+        "en": "Experimental; off leaves every behavior exactly as before. On: while an enemy with a blue shield (Shield > 0) stands within shield_counter_range, the mod switches to the DualHook and counters that enemy's blockable attacks, and will not switch the hook away while such an enemy is near.",
+        "zh-Hans": "测试中；关闭时行为与升级前完全一致。开启后：shield_counter_range 公分内存在带蓝色护盾（Shield > 0）的敌人时，自动切到别离残钩并对它的可格挡攻击放反制；附近有这种敌人时不会把别离残钩切走。"
+      },
+      "options": [
+        "off",
+        "on"
+      ]
+    },
+    {
+      "key": "shield_counter_range",
+      "type": "number",
+      "label": {
+        "en": "shield_counter_range",
+        "zh-Hans": "蓝盾扫描距离（公分）"
+      },
+      "default": 1500,
+      "restart": false,
+      "help": {
+        "en": "Scan radius in centimeters for blue-shielded enemies. Read only while shield_counter is on; wider ranges also react to enemies you are not fighting yet.",
+        "zh-Hans": "扫描蓝色护盾敌人的半径（公分）。仅在 shield_counter 开启时读取；范围越大越容易对尚未交手的敌人反应。"
+      },
+      "min": 0,
+      "max": 3000,
+      "step": 50
     },
     {
       "key": "dodge",

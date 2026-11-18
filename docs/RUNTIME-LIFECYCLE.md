@@ -216,6 +216,6 @@ state / 输入残留 → 关闭文件句柄”的顺序执行，并且幂等。�
 
 - [Architecture](ARCHITECTURE.md) — 模块职责、启动次序和数据流。
 - [Deflect State Machine](DEFLECT-STATE-MACHINE.md) — 弹反、闪避和 guard 状态模型。
-- [Configuration Reference](CONFIGURATION-REFERENCE.md) — 41 个配置项与迁移行为。
+- [Configuration Reference](CONFIGURATION-REFERENCE.md) — 46 个配置项与迁移行为。
 - [UE4SS Lua API Reference](UE4SS-LUA-API-REFERENCE.md) — UObject、game thread、Delayed Actions 和 Hook API。
 - [Module layout](MODULES.md) — 模块职责与运行时公开表面。

@@ -9,7 +9,7 @@
 
 | 文件 | 职责 |
 |---|---|
-| Scripts/menu_config.lua | 42 个字段的 schema、运行时类型与范围校验、单位转换、重启项隔离、热键读改写 |
+| Scripts/menu_config.lua | 46 个字段的 schema、运行时类型与范围校验、单位转换、重启项隔离、热键读改写 |
 | pbz-auto-defense.modsmenu.json | 原生菜单 UI 元数据：中英标签、帮助文本、默认值、选项、数值范围和 restart 标记 |
 | Scripts/main.lua | 运行时设置初值、旧 TXT 读取、配置加载顺序，以及热应用时需重置的内部状态 |
 | Scripts/ad_json.lua | 只接受扁平 JSON object；负责编码、解码和输入大小限制 |
@@ -34,7 +34,11 @@
 |---|---|---|---|---|---|
 | perfect | 完美弹反 / perfect | boolean / false | true 或 false | Live | 开启模组的完美弹反处理；具体策略由 perfect_mode 决定。 / Enables the mod's perfect-deflect handling; behavior is selected by perfect_mode. |
 | perfect_mode | 完美模式 / perfect_mode | string choice / "give" | always、give、window | Restart | always 持续维持完美标记；give 不常驻标记，而通过游戏窗口处理普通弹反并仅在特定黑闪/子弹窗口使用标记；window 在检测到近时命中时短暂加标记。window 是保留的实验模式。 / Selects always-on, give-window, or hit-window perfect handling. |
-| black_flash | 黑闪处理 / black_flash | string choice / "dodge" | dodge、parry | Restart | 主要用于 perfect_mode="give"：黑闪走闪避，或以完美标记处理弹反。 / In give mode, choose to dodge a black flash or handle it with the perfect tag. |
+| black_flash | 黑闪处理 / black_flash | string choice / "dodge" | dodge、parry | Restart | 主要用于 perfect_mode="give"：黑闪走闪避，或以完美标记处理弹反。hook_counter=on 且条件满足时黑光改走反制，不再看本项。 / In give mode, choose to dodge a black flash or handle it with the perfect tag. With hook_counter=on and its conditions met, a black flash is countered instead, and this setting is not consulted. |
+| hook_counter | 别离残钩反制 / hook_counter | string choice / "off" | off、on | Live | 关闭时不改变任何行为。开启后：手持别离残钩（武器名含 DualHook）且杀气不低于 hook_counter_shachi 时，黑光（PowerAttack）判定改为「按住格挡＋三角形」反制，不再按黑闪设置闪避/弹反；条件不满足时仍按 black_flash 处理。 / Off changes nothing. On: with a DualHook weapon in hand and shachi at or above hook_counter_shachi, a black-flash (PowerAttack) check becomes a block-and-triangle counter instead of what black_flash picks; when a condition fails, black_flash still decides. |
+| hook_counter_shachi | 反制杀气阈值（%） / hook_counter_shachi | number / 37 | 0–100，步进 1（%） | Live | 仅 hook_counter=on 时读取；杀气低于该值的黑光仍按 black_flash 处理。 / Read only while hook_counter is on; a black flash below it still follows black_flash. |
+| shield_counter | 蓝色护盾反制 / shield_counter | string choice / "off" | off、on | Live | 测试中；关闭时不扫描、不换武器，行为与之前完全一致。开启后：shield_counter_range 内有带蓝色护盾（AttributeSetBase.Shield > 0）的敌人时，自动切到别离残钩并对它的可格挡攻击放反制；附近有这种敌人时不会把别离残钩切走。 / Experimental; off scans nothing and switches nothing. On: a blue-shielded enemy (AttributeSetBase.Shield > 0) within shield_counter_range makes the mod switch to the DualHook, counter that enemy's blockable attacks, and keep the hook in hand while such an enemy is near. |
+| shield_counter_range | 蓝盾扫描距离（公分） / shield_counter_range | number / 1500 | 0–3000，步进 50 cm | Live | 仅 shield_counter=on 时读取；热改后下一次扫描即用新半径。 / Read only while shield_counter is on; a hot change applies to the next scan. |
 | dodge | 闪避模式 / dodge | string choice / "red" | off、red、all | Restart* | off 关闭自动闪避；red 处理红色不可弹反命中；all 扩展到正常/可弹反命中。特定实验攻击与黑闪仍有专门分支。 / Disables dodging, dodges red hits, or broadens dodge handling to all queried hit kinds. |
 | parry | 自动弹反 / parry | boolean / true | true 或 false | Live | 自动查询可弹反命中并执行弹反。关闭时会清除本模组待发的弹反/重复注入状态，不会强行释放玩家或其他模组持有的防守。 / Enables automatic parry; turning it off clears this mod's pending/repeated injections, not a player- or other-mod-owned guard. |
 | parry_method | 弹反输入方式 / parry_method | string choice / "key" | key、ability | Restart | key 模拟弹反按键；ability 直接尝试调用弹反能力，可能留下持续防守姿态。 / Use a deflect-key tap or direct ability activation; direct activation can leave a held guard stance. |
@@ -112,7 +116,7 @@ menu_config.validate 对完整配置按以下规则校验：
 7. 一个字段校验失败会拒绝整份新配置，不会只应用剩余字段。
 8. 未知的顶层扁平字段不会被删除；每个未知键每次运行只记录一次 warning。热键读改写会保留这些字段。
 
-Scripts/ad_json.lua 只支持顶层 JSON object 和标量值（string/number/boolean/null），不支持嵌套 object 或 array；最大读取/编码长度为 65536 字节，最多 256 个键。当前 schema 使用 41 个已知键，因此仍允许少量未来扩展键。
+Scripts/ad_json.lua 只支持顶层 JSON object 和标量值（string/number/boolean/null），不支持嵌套 object 或 array；最大读取/编码长度为 65536 字节，最多 256 个键。当前 schema 使用 46 个已知键，因此仍允许少量未来扩展键。
 
 示例：
 
@@ -178,7 +182,7 @@ menu_config.toggle 会先重新读取最新 JSON，只修改 perfect、parry 或
 
 1. main.lua 先读取 auto_defense.txt，把已识别的旧键解析进内存 settings；文件缺失时使用源码默认值。
 2. menu_config:load(true) 尝试读取 pbz-auto-defense.config.json。
-3. 仅当 JSON 文件不存在（Windows 文件不存在错误码 2）时，适配器才从当前内存设置构造 42 个新 schema 字段。
+3. 仅当 JSON 文件不存在（Windows 文件不存在错误码 2）时，适配器才从当前内存设置构造 46 个新 schema 字段。
 4. 新字段经过相同校验后，编码为扁平 JSON 并创建配置文件。
 5. 配置成功后，JSON 成为唯一权威来源；当菜单适配器已启用时，旧 saveSettings 不再写回 TXT。
 
@@ -188,6 +192,7 @@ menu_config.toggle 会先重新读取最新 JSON，只修改 perfect、parry 或
 
 - JSON 优先级高于 TXT；即使 TXT 中某个值不同，也会由 JSON 覆盖。
 - JSON 缺少某个已知字段时，该字段在内存中补 schema 默认值。
+- 1.6.6 之前的 JSON 不含 hook_counter / hook_counter_shachi / shield_counter / shield_counter_range：这四项按 schema 默认值补齐（off / 37 / off / 1500），所以升级后行为与 1.6.6 完全一致，无需手工迁移；下次菜单或热键保存时它们才写进文件。
 - 未知扁平字段保留并记录一次 warning。
 - 错误 JSON、类型错误、范围错误或跨字段不变量失败时，拒绝整份新配置并保留最后有效运行态；不会偷偷用 TXT 覆盖一个已经存在但损坏的 JSON。
 - 运行中修复 JSON 后，下一次轮询可重新加载；Restart 字段仍只会在下次游戏启动时应用。
@@ -220,4 +225,4 @@ menu_config.toggle 会先重新读取最新 JSON，只修改 perfect、parry 或
 
 ## 8. 当前 schema 快照 / Current schema snapshot
 
-当前配置 schema 为 **42 个字段**：**40 个可在原生菜单编辑**，dodge_attacks 与 data_off 两个自由文本字段菜单只读、需手动编辑 JSON。若代码和文档数字不一致，以 menu_config.lua 与 pbz-auto-defense.modsmenu.json 为准，并应修复本文及对应测试，而不是默默接受漂移。
+当前配置 schema 为 **46 个字段**：**44 个可在原生菜单编辑**，dodge_attacks 与 data_off 两个自由文本字段菜单只读、需手动编辑 JSON。若代码和文档数字不一致，以 menu_config.lua 与 pbz-auto-defense.modsmenu.json 为准，并应修复本文及对应测试，而不是默默接受漂移。

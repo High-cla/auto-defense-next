@@ -38,6 +38,8 @@ flowchart TD
     ASYNC["Scripts/ad_async.lua<br/>event ring + warm-up queue"] --> MAIN
     COMPAT["Scripts/ad_compat.lua<br/>Lua version adapters"] --> MAIN
     INPUTSTATE["Scripts/ad_inputstate.lua<br/>game hold answer, key fallback"] --> MAIN
+    WEAPON["Scripts/ad_weapon.lua<br/>read-only weapon / shachi / blue-shield readers"] --> MAIN
+    COUNTER["Scripts/ad_counter.lua<br/>counter timing state machine"] --> MAIN
     TOAST["Scripts/toast.lua"] --> MAIN
     MAIN --> GAME["PBZ gameplay objects / hooks / input"]
     MAIN --> LOGS["logs + decision ledger + perf"]
@@ -54,6 +56,8 @@ flowchart TD
 | Scripts/ad_input.lua | guard press/release、stance end、tag、input injection 的统一门 | 自己重新实现防守算法；绕过 policy 直接操作游戏 |
 | Scripts/ad_inputstate.lua | 读游戏自己的 hold 状态（`IsHolding/GetHoldTime`）并按注入窗口裁定是否采信；失败一律返回 nil | 缓存过期状态、把本模组注入的按键当成玩家按住、从 hook 里写游戏状态 |
 | Scripts/ad_seed.lua | 纯 reference_noframe 索引与复制后合并：敌人类 + Ability + 距离精确匹配，时间邻近去重 | 读取游戏对象、持有攻击生命周期、修改全局 hitTimes 或执行输入 |
+| Scripts/ad_weapon.lua | 只读游戏状态读取器：手里是不是别离残钩（武器名含 DualHook）、杀气多少、最近的蓝盾敌人在哪；读取函数由 main.lua 注入，结果按约 0.5 s 过期缓存，失败只计数一次原因 | 直接写游戏状态、执行输入、成为第二个 UObject 扫描点，或缓存过期读数 |
+| Scripts/ad_counter.lua | 反制时序状态机：offer / nextPress / guardUp / poll / pending / stats，按注入时钟在 0.22–0.35 s 窗口内给出「等 / 按 / 放弃」，一次只允许一个在途反制 | 直接写游戏状态、自己注入按键，或拥有攻击生命周期 |
 | Scripts/ad_async.lua | 只读事件环和预算化 warm-up 队列 | 在 hook 里直接做无界 IO/计算或改变防守判断 |
 | Scripts/ad_json.lua | 受限扁平 JSON 编解码 | 接受任意嵌套 JSON 或承担 schema policy |
 | Scripts/menu_config.lua | 配置 schema、校验、单位映射、持久化、热应用与 pending restart 状态 | 控制战斗算法或取代 Bridge 的菜单写入责任 |
@@ -124,6 +128,8 @@ tl.decide 的固定顺序：
 | 11 | receipt（可选） | 检查输入回执 |
 | 12 | parry | 处理尚未交给闪避的普通/蓝色命中 |
 
+反制层（`hook_counter` / `shield_counter`，默认都关）在时间轴候选到期时先试一次：`tl.counterTry` 把候选交给 `ad_counter`，读完 `ad_weapon` 的「武器在手 / 杀气达标 / 动作已解析」三个条件后给出 press、wait 或 nil。press 时本 tick 按住格挡姿态并在下一帧注入一次三角形，该候选不再进入 dodge/parry；wait 表示本 tick 太早、下一 tick 再算；nil 表示这段候选完全按 1.6.6 的闪避/弹反链走，两个开关都关时永远只得到 nil。
+
 **红招先于弹反**是一个重要顺序约束：不能把 parry 放到 dodge 前，否则可能抢先处理红色不可弹反命中。
 
 ## 5. Data and decision flow / 数据与决策流
@@ -167,10 +173,11 @@ ad_async 使用容量 512 的 ring buffer 收集只读事件，每 tick 最多 d
 - ad_policy 拥有 allow/deny 规则与拒绝计数。
 - ad_input 拥有 side-effect entry bindings，不拥有具体决策。
 - ad_seed 只拥有规范化索引和纯合并规则；main.lua 继续拥有 q.tapped、ReceiveFrame 配对和时间轴生命周期。
+- ad_weapon 只拥有读取缓存、失败原因和 stats；ad_counter 只拥有一次在途反制的时序（pending / pressOwed / 确认窗口）。按键注入、格挡保持和武器切换仍由 main.lua 执行。
 - menu_config 的 raw 和 lastText 对应最近一份通过验证的 JSON；pending 对应本次运行需重启的字段。
 - ad_menu_bridge 只拥有自己的文件名镜像统计和轮询节流，不拥有配置语义。
 
-tl.api 是显式公开给其他模块/测试的表面（当前 29 个名称）；未列入 tl.api 的字段均为内部实现细节。测试全局只在带 .ad-menu-test-only 标记的隔离副本中导出，正常安装不暴露这些全局。
+tl.api 是显式公开给其他模块/测试的表面（当前 31 个名称）；未列入 tl.api 的字段均为内部实现细节。测试全局只在带 .ad-menu-test-only 标记的隔离副本中导出，正常安装不暴露这些全局。
 
 ## 7. Persistence map / 持久化映射
 
@@ -201,7 +208,7 @@ tl.api 是显式公开给其他模块/测试的表面（当前 29 个名称）�
 
 ## Related documents / 相关文档
 
-- [Configuration Reference](CONFIGURATION-REFERENCE.md) — 41 个配置键与迁移策略。
+- [Configuration Reference](CONFIGURATION-REFERENCE.md) — 46 个配置键与迁移策略。
 - [Deflect State Machine](DEFLECT-STATE-MACHINE.md) — 候选命中到弹反/闪避执行的详细状态流。
 - [Runtime Lifecycle](RUNTIME-LIFECYCLE.md) — 游戏线程、主循环、Hook 与资源清理。
 - [Module layout](MODULES.md) — 文件职责、公开表面和 intent 规则表。

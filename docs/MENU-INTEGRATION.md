@@ -10,8 +10,8 @@
 
 - 唯一配置源：`pbz-auto-defense.config.json`；菜单描述：[pbz-auto-defense.modsmenu.json](../pbz-auto-defense.modsmenu.json)。字段 schema 由 [CONFIGURATION-REFERENCE.md](CONFIGURATION-REFERENCE.md) 解释。
 - 首次缺 JSON 时，将原有 `auto_defense.txt` 导入，之后不再同步写 TXT；已有 JSON 不覆盖。TXT 留作回滚。
-- **默认参数（1.6.4 起）**：`pbz-auto-defense.config.json`、描述符每行 `default`、`Scripts/main.lua` 的 `settings` 初值三处取同一组值——本版实机调过的设置：perfect=false、perfect_mode=give、dodge=red、parry=true、parry_method=key、parry_reach=0.5、guard_release_after=0.5、guard_release_combat_end=0.5、parry_lead=auto（manual 0.08）、dodge_lead_ms=80、dodge_gap_ms=120、dodge_iframe_ms=260、min_gap_ms=120、grab_lead_ms=240、receipt=false、dodge_cd=false、busy_skip=false、learn=true、data=true、seed_fallback=record、pbzpd=auto，热键 F7/F8/F9/F6。三处不一致时以 JSON 为准，但新装/重置应得到同一套。
-- 当前 schema 为 42 个 JSON 字段与描述符逐项对应，40 个菜单可编辑，2 个自由文本只读。原生菜单没有任意字符串编辑器，不能声称全部字段都能在菜单输入文本。完整字段表、双语注释、类型/默认值/范围和迁移规则见 [CONFIGURATION-REFERENCE.md](CONFIGURATION-REFERENCE.md)。
+- **默认参数（1.6.4 起）**：`pbz-auto-defense.config.json`、描述符每行 `default`、`Scripts/main.lua` 的 `settings` 初值三处取同一组值——本版实机调过的设置：perfect=false、perfect_mode=give、dodge=red、parry=true、parry_method=key、parry_reach=0.5、guard_release_after=0.5、guard_release_combat_end=0.5、parry_lead=auto（manual 0.08）、dodge_lead_ms=80、dodge_gap_ms=120、dodge_iframe_ms=260、min_gap_ms=120、grab_lead_ms=240、receipt=false、dodge_cd=false、busy_skip=false、learn=true、data=true、seed_fallback=record、hook_counter=off、hook_counter_shachi=37、shield_counter=off、shield_counter_range=1500、pbzpd=auto，热键 F7/F8/F9/F6。三处不一致时以 JSON 为准，但新装/重置应得到同一套。
+- 当前 schema 为 46 个 JSON 字段与描述符逐项对应，44 个菜单可编辑，2 个自由文本只读。原生菜单没有任意字符串编辑器，不能声称全部字段都能在菜单输入文本。完整字段表、双语注释、类型/默认值/范围和迁移规则见 [CONFIGURATION-REFERENCE.md](CONFIGURATION-REFERENCE.md)。
 - `parry_lead` 分成 auto/manual 模式；手动值在 `parry_lead_seconds`。其余 `*_ms` 在 JSON/菜单用毫秒，内部转换为秒。
 - 未知平面字段保留；非法 JSON、错误类型、越界数值和嵌套对象/数组拒绝应用并保留最后有效运行态，不偷偷覆盖坏文件。
 - 首次迁移失败会显示 pending 状态并重试；在有效 JSON 可用前热键不回写坏配置。运行中恢复时仍不会热应用重启项。
@@ -23,6 +23,10 @@
 | `perfect` | 完美弹反 | 下次配置检查 |
 | `perfect_mode` | 完美模式 | 重启游戏 |
 | `black_flash` | 黑闪处理 | 重启游戏 |
+| `hook_counter` | 别离残钩反制 | 下次配置检查 |
+| `hook_counter_shachi` | 反制杀气阈值（%） | 下次配置检查 |
+| `shield_counter` | 蓝色护盾反制（测试中） | 下次配置检查 |
+| `shield_counter_range` | 蓝盾扫描距离（公分） | 下次配置检查 |
 | `dodge` | 闪避模式 | 重启游戏 |
 | `parry` | 自动弹反 | 下次配置检查 |
 | `parry_method` | 弹反输入方式 | 重启游戏 |
@@ -64,6 +68,7 @@
 
 ### 必须理解的例外
 
+- `hook_counter` 与 `shield_counter` 虽是防守行为开关却标 Live（描述符 `restart: false`）：反制层每 tick 读当前设置，关掉后下一步就回到黑闪/闪避的老路径。`hook_counter=on` 时黑光是否闪避已经不看 `black_flash`——那个键仍是重启项，改它不会立刻改变已开启的反制。
 - F8 保留旧版即时切换闪避模式行为；菜单修改 `dodge` 则保守地等重启。其他装载期或共享防守状态项同样保守标重启，部分是风险策略而非 Lua 语法硬限制。
 - F9 同时是模组菜单默认开启键，建议在 AD 菜单把 `key_parry` 改为 CTRL+F9 或另一键后重启。本轮没有擅自改变现有按键。
 - `seed_fallback=record` 只观察严格的敌人/招式/距离匹配，不触发输入；`on` 才启用只闪避的参考时机，且必须有 `data=true`。
