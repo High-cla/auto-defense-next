@@ -77,7 +77,7 @@ flowchart TD
 弹反入口会先检查：
 
 - parry 开关与 parry failure backoff。
-- PBZPerfectDefense 是否拥有 guard；若对方 AutoGuard 正在持有防守，AD 不再争抢弹反输入。
+- PBZPerfectDefense 是否拥有 guard；若对方 AutoGuard 正在持有防守，AD 不再争抢弹反输入。闸门读的是对方**磁盘配置 + 启用状态**（`pbzpd=yield` 时），不是跨进程锁。
 - 当前是否有 special attack / black flash 已指定交由 dodge。
 - 若 game-data 层可用，玩家当前无敌窗会跳过不必要的 parry。
 - hit handle 是否有效且未被当前轮次标记为已处理。
@@ -215,6 +215,7 @@ PBZPerfectDefense ownership 对 perfect tag 与 guard press 有独立限制；�
 - tools/test_policy.lua 验证 intent allow/deny 规则；tools/test_timeline.lua 验证时间轴表和计数所有权；tools/test_menu_config.lua 验证配置约束。
 - 实机验收必须覆盖红/蓝/普通命中、黑闪、抓取、多段连击、闪避覆盖、连续闪避 cooldown、PD AutoGuard、Pawn 切换、对话/过场和无 ReceiveFrame 的 fallback。
 - 在修改顺序、提前量、dedupe 或 guard release 前，先记录相同场景的 decision ledger 与 perf_log；不要只凭平均时间判断稳定性。
+- 与 PBZPerfectDefense 的让位是**共约**（cooperative hand-off）：读它的配置与启用状态后主动退让，**不是跨进程互斥**。两套运行时各自持有本地状态，没有握手也没有仲裁者；对方在我们判定之后才改动 guard 时，同一帧仍可能出现双方动作。`pbzpd=yield` 只保证「不去争抢一个它声明要守的 guard」，不保证无竞态。
 - 反射生成的 SDK 声明不是 UE4SS Lua 调用成功的证据；Out 参数、输入回执和跨 build 行为需分别验证。
 
 ## Related documents / 相关文档
