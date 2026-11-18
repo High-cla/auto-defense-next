@@ -36,7 +36,10 @@ if [ -z "$py" ]; then
 fi
 "$py" "$(win "$here")/tools/ci_prepare_test_fixtures.py" --root "$(win "$tmp")"
 # The legacy TXT is part of the fixture: the test asserts it stays byte-identical.
-cp "$here/auto_defense.txt" "$tmp/"
+# A migrated install may not have one (the menu writes pbz-auto-defense.config.json
+# and only the keys the menu does not carry still go to the TXT), so the fixture
+# generated above is what the test sees in that case.
+if [ -f "$here/auto_defense.txt" ]; then cp "$here/auto_defense.txt" "$tmp/"; fi
 : > "$tmp/.ad-menu-test-only"
 cd "$tmp"
 test_script="$here/tools/test_integration.lua"

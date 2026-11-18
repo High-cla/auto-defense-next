@@ -99,7 +99,7 @@ end
 eq(unknownWarn, 1, "an unknown key is named once, not on every poll")
 
 -- The shipped PBZModsMenu descriptor must present the same hot three-state field.
-eq(#config.schema, 42, "schema gains exactly one seed fallback field")
+eq(#config.schema, 46, "schema carries the four counter fields next to the seed fallback")
 local df = assert(io.open("pbz-auto-defense.modsmenu.json", "rb"))
 local descriptor = df:read("*a"); df:close()
 local seedAt = assert(descriptor:find("\"key\": \"seed_fallback\"", 1, true), "seed descriptor missing")

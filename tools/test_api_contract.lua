@@ -83,4 +83,27 @@ eq(seedPair ~= nil, true, "seed rows have a real-frame priority branch")
 eq(pairCall ~= nil and pairCall > seedPair, true, "seed branch asks the existing frame pairing before pressing")
 eq(seedReason ~= nil, true, "a seed-triggered action names its source")
 
+-- 5. The 1.6.7 counter: the modules read the game through injected readers only,
+-- the Triangle press is resolved by name (scanning EnhancedActionMappings from
+-- Lua crashed UE4SS with a null FProperty), and a countered hit is neither
+-- parried nor dodged. Both features ship off, so an untouched install behaves
+-- exactly like 1.6.6.
+eq(src:find("tl.installCounter", 1, true) ~= nil, true, "the counter layer is installed from main.lua")
+eq(src:find("Scripts/ad_weapon.lua", 1, true) ~= nil, true, "the weapon reader is loaded by name")
+eq(src:find("Scripts/ad_counter.lua", 1, true) ~= nil, true, "the counter timing module is loaded by name")
+local code = src:gsub("%-%-[^\n]*", "") -- comments may name the table; code may not
+eq(code:find("EnhancedActionMappings", 1, true) == nil, true, "no Lua scan of the action mappings")
+eq(src:find("tl.COUNTER_ACTIONS", 1, true) ~= nil, true, "the Triangle press is looked up by name")
+local counteredTry = src:find("tl.counterTry(kind, now + ttl, now, q.actor, q, j)", 1, true)
+local blackBranch = src:find("if h.t == \"4\" and not countered", 1, true)
+eq(counteredTry ~= nil and blackBranch ~= nil and counteredTry < blackBranch, true,
+   "the counter decides before the black-flash branch")
+eq(src:find("local dodgeIt = not countered and", 1, true) ~= nil, true, "a countered hit is not dodged")
+eq(src:find('hookCounter = "off", hookCounterShachi = 37, shieldCounter = "off"', 1, true) ~= nil, true,
+   "both counter features are off by default")
+eq(src:find('if settings.hookCounter == "on" or settings.shieldCounter == "on" then', 1, true) ~= nil, true,
+   "the counter ticks are only scheduled when a feature is on")
+eq(src:find("hold.q.tapped[hold.j] = nil", 1, true) ~= nil, true,
+   "a stance that never starts hands its hit back to the ordinary chain")
+
 print("API_CONTRACT PASS " .. n .. " assertions")

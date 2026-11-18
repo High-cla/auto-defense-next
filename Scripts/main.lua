@@ -218,6 +218,11 @@ local settings = { perfect = false, perfectMode = "give", blackFlash = "dodge", 
     readFrames = true, parryLeadCfg = "auto", dodgeLead = 0.08, dodgeGap = 0.12, dodgeIframe = 0.26,
     pairFrames = true, receipt = false, receiptRetry = false, ledger = true, latency = true, data = true, dataOff = {}, dataTags = false,
     seedFallback = "record",
+    -- 1.6.7: the 别离残钩 counter (black flash answered with hold guard + Triangle
+    -- while the weapon is in hand and Sha-chi is high enough) and the blue-shield
+    -- counter (bring the weapon out when a shielded enemy is near, counter its
+    -- blockable hits). Both off: an install that enables nothing runs 1.6.6.
+    hookCounter = "off", hookCounterShachi = 37, shieldCounter = "off", shieldCounterRange = 1500,
     -- 1.4.4, from PBZAssist 1.3.3: min_gap_ms between two deflect presses, the
     -- grab's own lead, dodging again while the last dodge still runs (dodge_cd),
     -- pressing into an action lock (busy_skip), holding the guard through a
@@ -305,6 +310,12 @@ do
             if k == "data" then settings.data, settings.dataLine = v ~= "off", true end
             if k == "data_tags" then settings.dataTags, settings.dataLine = v ~= "off", true end
             if k == "seed_fallback" and (v == "off" or v == "record" or v == "on") then settings.seedFallback = v end
+            if k == "hook_counter" and (v == "off" or v == "on") then settings.hookCounter = v end
+            if k == "shield_counter" and (v == "off" or v == "on") then settings.shieldCounter = v end
+            local hs = line:match("^%s*hook_counter_shachi%s*=%s*([%d%.]+)")
+            if hs and tonumber(hs) then settings.hookCounterShachi = tonumber(hs) end
+            local sr = line:match("^%s*shield_counter_range%s*=%s*([%d%.]+)")
+            if sr and tonumber(sr) then settings.shieldCounterRange = tonumber(sr) end
             if k == "data_off" then
                 settings.dataOff = {}
                 local value = line:match("^%s*data_off%s*=%s*(.-)%s*$") or ""
@@ -397,6 +408,15 @@ local function saveSettings()
     f:write("data_tags = " .. (settings.dataTags and "on" or "off") .. "\n")
     f:write("# seed_fallback: off, record (log exact matches only), or on (dodge from reference no-frame seeds)\n")
     f:write("seed_fallback = " .. (settings.seedFallback or "record") .. "\n")
+    f:write("# hook_counter: on = with 别离残钩 (DualHook) in hand and Sha-chi at hook_counter_shachi % of\n")
+    f:write("# its maximum, a black flash is answered with the counter (hold guard + Triangle) instead of\n")
+    f:write("# the dodge. Nothing is pressed with any other weapon, and off leaves the chain untouched\n")
+    f:write("hook_counter = " .. (settings.hookCounter or "off") .. "\n")
+    f:write(string.format("hook_counter_shachi = %.0f\n", tonumber(settings.hookCounterShachi) or 37))
+    f:write("# shield_counter (being tested): on = an enemy with a blue shield inside shield_counter_range\n")
+    f:write("# centimetres makes the mod bring 别离残钩 out and counter that enemy's blockable hits\n")
+    f:write("shield_counter = " .. (settings.shieldCounter or "off") .. "\n")
+    f:write(string.format("shield_counter_range = %.0f\n", tonumber(settings.shieldCounterRange) or 1500))
     local dataOff = {}
     for k in pairs(settings.dataOff or {}) do dataOff[#dataOff + 1] = k end
     table.sort(dataOff)
@@ -513,7 +533,7 @@ local tl = { BLACK_LEAD = 0.5, GIVE_RELEASE = 0.6, BULLET_HOLD = 1.2, TORNADO_MO
 -- traceback the first time it is seen, so a broken hook is visible with debug = off
 -- (until 1.6.2 those three went to attackLog, which returns at once unless DEBUG).
 do
-    tl.VERSION = "1.6.6"
+    tl.VERSION = "1.6.7"
     tl.errs = {}
     function tl.err(what, err)
         local n = (tl.errs[what] or 0) + 1
@@ -955,6 +975,52 @@ tl.seedRows = function(ability, actorClass, distance, existing)
     local merged, added, candidates = tl.seed:merge(ability, actorClass, distance, existing)
     if settings.seedFallback == "on" then return merged, added, candidates end
     return existing or {}, added, candidates -- record observes, but cannot activate a row
+end
+-- 1.6.7: the counter layer. ad_weapon reads the game (injected readers only) and
+-- ad_counter holds the timing; main.lua presses. Installed once, and a module
+-- that does not load leaves both features off without touching the key chain.
+tl.installCounter = function()
+    if tl.weapon or tl.weaponErr then return tl.weapon, tl.counter end
+    local okW, weaponMod = pcall(dofile, MOD_DIR .. "Scripts/ad_weapon.lua")
+    local okC, counterMod = pcall(dofile, MOD_DIR .. "Scripts/ad_counter.lua")
+    if not (okW and type(weaponMod) == "table" and type(weaponMod.new) == "function") then
+        tl.weaponErr = okW and "ad_weapon.lua returned no module" or weaponMod
+        log("counter: the weapon reader is not used (%s)", tostring(tl.weaponErr))
+        return nil, nil
+    end
+    if not (okC and type(counterMod) == "table" and type(counterMod.new) == "function") then
+        tl.counterErr = okC and "ad_counter.lua returned no module" or counterMod
+        log("counter: the timing module is not used (%s)", tostring(tl.counterErr))
+        return nil, nil
+    end
+    local okI, weapon, counter = pcall(function()
+        local w = weaponMod.new{
+            name = "DualHook",
+            range = tonumber(settings.shieldCounterRange) or 1500,
+            log = log,
+            -- Sha-chi as a share of its maximum: tl.shachiShare is the one reader
+            -- (tickShachi already uses it), handed to the module as 0-100 so the
+            -- menu percentage compares directly
+            vitals = function()
+                if not tl.shachiShare then return nil end
+                local ok, share = pcall(tl.shachiShare)
+                if not (ok and tonumber(share)) then return nil end
+                return { shachi = share * 100, max = 100 }
+            end,
+            weapon = function() return tl.weaponNow() end,
+            enemies = function() return tl.attackersNow() end,
+        }
+        return w, counterMod.new{ log = log }
+    end)
+    if not okI then
+        tl.weaponErr = weapon
+        log("counter: not installed (%s)", tostring(tl.weaponErr))
+        return nil, nil
+    end
+    tl.weapon, tl.counter = weapon, counter
+    log("counter: ready (hook %s, Sha-chi %s%%, blue shield %s within %s cm)", tostring(settings.hookCounter),
+        tostring(settings.hookCounterShachi), tostring(settings.shieldCounter), tostring(settings.shieldCounterRange))
+    return weapon, counter
 end
 -- a grab (GA_*_GEx*: grab, then the execution) cannot be parried; its frame
 -- comes tl.grabWindow at most after the start and is dodged (test10d: Scavenger
@@ -2027,6 +2093,291 @@ tl.holdGuard = function(untilT, why)
     return true
 end
 
+-- ---------------------------------------------------------------- counter
+-- 1.6.7, off by default: 别离残钩 answers a black flash with the game's own
+-- counter (hold the guard stance, press Triangle 0.22-0.35 s before the hit),
+-- and an enemy carrying a blue shield makes the mod bring that weapon out first
+-- and counter its blockable hits. The counter is a dodge replacement, not a
+-- second press: the hit it takes is marked in q.countered and the timeline skips
+-- both its parry and its dodge.
+do
+    local said = {}
+    local function once(key, fmt, ...)
+        if said[key] then return end
+        said[key] = true
+        log(fmt, ...)
+    end
+    tl.counterHold = nil -- { stance, untilT, action, pressed }
+    -- The class name as written on disk, for log lines only (short() is defined
+    -- much later in the chunk and nothing here may call forward).
+    local function brief(v)
+        if not valid(v) then return nil end
+        local ok, s = pcall(function() return v:GetName() end)
+        return ok and type(s) == "string" and s or nil
+    end
+    -- The Triangle press. EnhancedActionMappings is not scanned for it: doing that
+    -- from Lua crashed inside UE4SS (null FProperty, 1.3.x), so the names the game
+    -- uses for that key are tried in order and the first that resolves is kept.
+    tl.COUNTER_ACTIONS = { "IA_AttackH_Press", "IA_AttackH_Hold", "IA_AttackH_PressLong", "IA_AttackH" }
+    tl.counterAction = function()
+        if valid(tl.counterAct) then return tl.counterAct end
+        local t = os.clock()
+        if t < (tl.counterActAt or 0) then return nil end
+        tl.counterActAt = t + 5
+        for _, name in ipairs(tl.COUNTER_ACTIONS) do
+            local a = inputAction(name)
+            if valid(a) then
+                tl.counterAct = a
+                log("counter: %s is the press for the 别离残钩 counter", name)
+                return a
+            end
+        end
+        once("noact", "counter: no Triangle input action resolved (%s), a black flash keeps the dodge",
+            table.concat(tl.COUNTER_ACTIONS, ", "))
+        return nil
+    end
+    -- the main weapon in hand and the one a weapon switch brings out (backpack
+    -- subsystem; 0.5 s cache so a tick never reads it twice)
+    local cacheAt, cache, bag, bagAt = -1e9, nil, nil, -1e9
+    local function backpack()
+        if valid(bag) then return bag end
+        if os.clock() < bagAt then return nil end
+        bagAt = os.clock() + 5
+        local ok, list = pcall(FindAllOf, "PBZBackPackSubsystem")
+        if not ok then return nil end
+        for _, one in ipairs(list or {}) do
+            if valid(one) and not tostring(brief(one)):find("^Default__") then bag = one return bag end
+        end
+        return nil
+    end
+    -- The backpack keeps weapon IDs as plain strings (MainWeapons is a
+    -- TArray<string>, CurrentMainWeaponID a string): asking valid() or GetFullName
+    -- of them throws, and a throw here used to silence both counter features.
+    local function textOf(v)
+        if type(v) == "string" then return v end
+        if v == nil or type(v) == "number" or type(v) == "boolean" then return nil end
+        local ok, s = pcall(function() return v:GetFullName() end)
+        if ok and type(s) == "string" then return s end
+        local okg, raw = pcall(function() return v:get() end)
+        return okg and type(raw) == "string" and raw or nil
+    end
+    -- the same weapon may be named by its class or by its display name; the module
+    -- matches one substring, so both spellings are normalized to it
+    local function hookName(s)
+        if type(s) ~= "string" then return s end
+        return (s:gsub("別離殘鉤", "DualHook"):gsub("别离残钩", "DualHook"))
+    end
+    tl.weaponNow = function()
+        local t = os.clock()
+        if t - cacheAt < 0.5 then return cache end
+        cacheAt = t
+        local out = nil
+        local bp = backpack()
+        if bp then
+            pcall(function()
+                local names, n = {}, 0
+                local list = bp.MainWeapons
+                if list ~= nil then
+                    local okn, len = pcall(function() return #list end)
+                    len = okn and tonumber(len) or nil
+                    if len and len > 0 then
+                        n = len
+                        for i = 1, n do names[i] = textOf(list[i]) end
+                    else
+                        pcall(function() list:ForEach(function(_, v) names[#names + 1] = textOf(v) end) end)
+                        n = #names
+                    end
+                end
+                local idx = tonumber(bp.CurrentWeaponIndex)
+                local cur = idx and names[idx + 1] or nil
+                cur = hookName(cur or textOf(bp.CurrentMainWeaponID))
+                local nxt = nil
+                if idx and n > 1 then nxt = hookName(names[(idx + 1) % n + 1]) end
+                out = { current = cur, next = nxt }
+            end)
+        end
+        cache = out
+        return out
+    end
+    -- enemies that announced an attack in the last 20 s: the blue-shield scan needs
+    -- nobody else, and this mod enumerates no actors (FindAllOf stays out of ticks)
+    do
+        local recent = {}
+        tl.recentAttackers = recent
+        -- never throws: it runs on the queue path of every announced attack, and a
+        -- stranger object must not be able to stop that path
+        local noted = 0
+        tl.noteAttacker = function(actor, dist)
+            if actor == nil then return end
+            pcall(function()
+                if not valid(actor) then return end
+                local ok, addr = pcall(function() return actor:GetAddress() end)
+                if not (ok and addr) then return end
+                recent[addr] = { actor = actor, at = os.clock(), dist = dist }
+                -- the scan that reads this table only runs with shield_counter on, so
+                -- the sweep cannot wait for it (a leak on every install with it off)
+                noted = noted + 1
+                if noted % 64 == 0 then
+                    local now = os.clock()
+                    for a, rec in pairs(recent) do
+                        if now - rec.at > 20 then recent[a] = nil end
+                    end
+                end
+            end)
+        end
+        tl.attackersNow = function()
+            local out, now = {}, os.clock()
+            for addr, rec in pairs(recent) do
+                if now - rec.at > 20 or not valid(rec.actor) then
+                    recent[addr] = nil
+                else
+                    local one = { actor = rec.actor, dist = rec.dist }
+                    pcall(function()
+                        local okc, cls = pcall(function() return rec.actor:GetClass() end)
+                        if okc and valid(cls) then one.class = brief(cls) end
+                        local set = rec.actor.AttributeSetBase
+                        if valid(set) then
+                            local oks, sv = pcall(RT.curOf, set.Shield)
+                            if oks then one.shield = tonumber(sv) end
+                            local okm, mv = pcall(RT.curOf, set.Shield_Max)
+                            if okm then one.max = tonumber(mv) end
+                        end
+                        if valid(currentPawn) then
+                            local okd, d = pcall(function() return rec.actor:GetDistanceTo(currentPawn) end)
+                            d = okd and tonumber(unwrap(d)) or nil
+                            if d then one.dist = d end
+                        end
+                    end)
+                    out[#out + 1] = one
+                end
+            end
+            return out
+        end
+    end
+    local function blueShield(actor)
+        local okv, usable = pcall(valid, actor) -- a stranger object must not throw
+        if not (okv and usable) then return nil end
+        local ok, set = pcall(function() return actor.AttributeSetBase end)
+        if not (ok and valid(set)) then return nil end
+        local oks, sv = pcall(RT.curOf, set.Shield)
+        local v = oks and tonumber(sv) or nil
+        return v ~= nil and v > 0 and v or nil
+    end
+    tl.counterShieldOf = blueShield
+    -- which counter, if any, this timeline row asks for
+    tl.counterKind = function(h)
+        -- a black flash belongs to the hook counter or to no counter at all: the
+        -- blue-shield counter answers the blockable hits of a shielded enemy
+        if h.t == "4" then return settings.hookCounter == "on" and "black" or nil end
+        if settings.shieldCounter == "on" and not h[3] then return "shield" end
+        return nil
+    end
+    -- "press" starts the hold, "wait" means a later tick offers again, nil leaves
+    -- the row to the dodge/parry chain exactly as before
+    tl.counterTry = function(kind, hitAt, now, actor, q, j)
+        if not (tl.weapon or tl.weaponErr) then tl.installCounter() end
+        local W, C = tl.weapon, tl.counter
+        if not (W and C) then return nil end
+        if kind == "shield" then
+            if not blueShield(actor) then return nil end
+            local ok, dist = pcall(function() return actor:GetDistanceTo(currentPawn) end)
+            dist = ok and tonumber(unwrap(dist)) or nil
+            if not dist or dist > (tonumber(settings.shieldCounterRange) or 1500) then return nil end
+        end
+        local action = tl.counterAction()
+        local verdict = C:offer(kind, hitAt, hitAt - now, {
+            held = W:held(now),
+            shachiOk = W:enough(tonumber(settings.hookCounterShachi) or 37, now),
+            action = action ~= nil,
+        })
+        if verdict == "press" then
+            if tl.releaseHeldKey then pcall(tl.releaseHeldKey) end
+            tapHold = nil -- the counter holds the stance, not the deflect key
+            local stance = inputAction("IA_Stance") or inputAction("IA_Deflect")
+            tl.counterHold = { kind = kind, stance = stance, action = action, pressed = false,
+                untilT = hitAt + 0.15, q = q, j = j }
+            tl.led("counter %s: hold guard + %s, %.3f s before the hit", kind, tostring(action and action:GetFullName() or "-"),
+                hitAt - now)
+            log("counter: %s %.3f s before the hit (guard held, Triangle pressed next frame)", kind, hitAt - now)
+        end
+        return verdict
+    end
+    -- called every frame: re-inject the stance while it must hold, press the
+    -- counter action once, and close the bookkeeping
+    tl.tickCounter = function(now)
+        local hold = tl.counterHold
+        if hold then
+            if now >= hold.untilT then
+                tl.counterHold = nil
+            else
+                if valid(hold.stance) then tl.try("counter stance", injectKey, hold.stance) end
+                if not hold.pressed then
+                    hold.pressed = true
+                    local okp, sent = pcall(injectKey, hold.action)
+                    if okp and sent then
+                        -- the press went out: the stance has until confirmBy to show
+                        if tl.counter then pcall(tl.counter.guardUp, tl.counter, now) end
+                    else
+                        once("pressfail", "counter: the Triangle press could not be injected (%s)",
+                            okp and "no input subsystem" or tostring(sent))
+                    end
+                end
+            end
+        end
+        local C = tl.counter
+        if not C then return end
+        local res = C:poll(now)
+        if res == "confirmed" then tl.led("counter: the press was injected (the stance itself is not read)") end
+        if res == "failed" then
+            -- the stance never started: give the hit back to the ordinary chain so
+            -- the dodge (or, for a black flash, the black rule) can still take it
+            local hold = tl.counterHold
+            if hold and hold.q and hold.j then
+                pcall(function()
+                    hold.q.countered[hold.j] = nil
+                    hold.q.tapped[hold.j] = nil
+                end)
+            end
+            tl.counterHold = nil
+            once("fail", "counter: the stance did not start in time, the next hit takes the normal defence")
+            tl.led("counter: the stance did not start in time")
+        end
+    end
+    -- bring 别离残钩 out for a blue-shielded enemy, at most every 2 s, and never
+    -- while a counter is being played out
+    tl.tickShieldSwitch = function(now)
+        if settings.shieldCounter ~= "on" or tl.counterHold then return end
+        if not tl.weapon then tl.installCounter() end
+        local W = tl.weapon
+        if not (W and valid(currentPawn)) then return end
+        if W:held(now) then
+            if tl.shieldSwitchAt and not tl.shieldHeldLogged then
+                tl.shieldHeldLogged = true
+                log("blue shield: 别离残钩 is in hand and a shielded enemy is near, it stays out")
+            end
+            return
+        end
+        local near = W:shield(now)
+        if not near then return end
+        if now < (tl.shieldSwitchAt or -1e9) + 2 then return end
+        if not W:nextHeld(now) then
+            once("noalt", "blue shield: %s is near, but a weapon switch would not bring 别离残钩 out (holding %s)",
+                tostring(near.class), tostring((tl.weaponNow() or {}).current))
+            return
+        end
+        local change = inputAction("IA_ChangeWeapon")
+        if not change then
+            once("nochange", "blue shield: IA_ChangeWeapon does not resolve, the weapon cannot be switched")
+            return
+        end
+        if injectKey(change) then
+            tl.shieldSwitchAt, tl.shieldHeldLogged = now, nil
+            log("blue shield: %s (%.0f/%.0f, %.0f cm away): switching to 别离残钩", tostring(near.class), near.shield,
+                near.max or 0, near.dist)
+        end
+    end
+end
+
 local function tapParry(h, now)
     if tapWorks == false or settings.parryMethod ~= "key" then return false end
     if tl.guardOwned() then return false end
@@ -2155,6 +2506,14 @@ local function tickParry(deflect, input, now)
     -- the late-attack hook may have just held the deflect key: the tap would be
     -- no new press (test10j: 4 of 10 such taps hit vs 11 of 73 others)
     if tl.releaseHeldKey then tl.releaseHeldKey() end
+    -- 1.6.7: while a counter holds its stance a guard tap may go out for the same
+    -- announced hit. It is not suppressed here (that would change the 1.6.6 path
+    -- without evidence), but it is recorded: the next play test can tell whether
+    -- the counter still comes out with a tap in the way.
+    if tl.counterHold then
+        tl.counterTaps = (tl.counterTaps or 0) + 1
+        if tl.counterTaps <= 5 then tl.led("counter: a guard tap went out inside the counter window (h=%d)", h) end
+    end
     if tapParry(h, now) then return end
     if parryWorks then
         tryParry(input, parryWorks, h, now)
@@ -2670,6 +3029,9 @@ local function queueTimeline(ab, name, actor, pawn, via)
     if not dist or dist > TL_NEAR then
         return string.format("  (timeline: too far, %s cm)", dist and string.format("%.0f", dist) or "?")
     end
+    -- the blue-shield scan only looks at attackers that got this far: this mod
+    -- enumerates no actors of its own outside the hook's own walk
+    if tl.noteAttacker then tl.noteAttacker(actor, dist) end
     -- The reference overlay is exact actor + ability and copy-on-write. record
     -- observes candidates but cannot hand a row to the decision path; on adopts
     -- only this activation's merged list. Global hitTimes is never changed.
@@ -3579,11 +3941,26 @@ do
             q.tNow, q.rateNow = not done and t or nil, rate -- for tl.learnFromHit
             local pending = false
             for j, h in ipairs(q.hits) do
+                -- 1.6.7, off by default: a counter takes this hit instead of the
+                -- dodge or the parry. The modules answer, main.lua presses: the
+                -- stance is held and Triangle goes out 0.22-0.35 s before the hit,
+                -- which is what the game reads as its own counter
+                local countered = q.countered and q.countered[j]
+                if not countered and (settings.hookCounter == "on" or settings.shieldCounter == "on") then
+                    local kind = tl.counterKind(h)
+                    local ttl = (h[1] - t) / rate
+                    if kind and ttl > -0.05 and tl.counterTry(kind, now + ttl, now, q.actor, q, j) == "press" then
+                        q.countered, q.tapped = q.countered or {}, q.tapped or {}
+                        q.countered[j], q.tapped[j] = true, true
+                        countered = true
+                        tl.led("timeline %s@%.2f: %s counter, not dodged", q.name, h[1], kind)
+                    end
+                end
                 if t < h[1] + h[2] then pending = true end
                 if not q.tapped[j] and h[1] - t <= tl.redDefer * rate then soon = true end
                 -- perfect_mode = give: a black flash (type 4) breaks a plain parry;
                 -- the perfect tag goes on from BLACK_LEAD before it until it is over
-                if h.t == "4" and settings.perfectMode == "give" and h[1] - t <= tl.BLACK_LEAD * rate
+                if h.t == "4" and not countered and settings.perfectMode == "give" and h[1] - t <= tl.BLACK_LEAD * rate
                     and t < h[1] + h[2] + 0.1 then
                     q.black = q.black or {}
                     if not q.black[j] then
@@ -3615,7 +3992,7 @@ do
                         if endStance then pcall(endStance, pawn, "black flash coming") end
                     end
                 end
-                local dodgeIt = (h[3] or (q.forced and q.forced[j]) or (h.t == "4" and tl.blackDodge()))
+                local dodgeIt = not countered and (h[3] or (q.forced and q.forced[j]) or (h.t == "4" and tl.blackDodge()))
                     and settings.dodge ~= "off"
                 if dodgeIt and h[4] and not q.moved[j] and t >= h[1] - AREA_MOVE_LEAD * rate and t < h[1] + 0.05 then
                     q.moved[j] = true
@@ -4948,6 +5325,13 @@ tl.decide = function(p, deflect, input, now)
     guarded("dodge", tickDodge, deflect, input, now)
     guarded("timed dodge", tickTimedDodge, input, now)
     guarded("tap hold", tickTapHold)
+    -- 1.6.7: both features are off by default and cost one boolean check a frame
+    if settings.hookCounter == "on" or settings.shieldCounter == "on" then
+        guarded("counter", tl.tickCounter, now)
+        guarded("shield switch", tl.tickShieldSwitch, now)
+    elseif tl.counterHold then
+        tl.counterHold = nil -- switched off while a counter was in flight
+    end
     if settings.receipt then guarded("receipt", tl.tickReceipt, p) end
     guarded("parry", tickParry, deflect, input, now)
     return false
@@ -5278,7 +5662,7 @@ do
         "tickReceipt", "fxScan", "fxDue", "fxClear", "pressTap", "releaseHeldKey",
         "menu", "input", "policy", "bus", "warm", "led", "ledFlush", "emit", "err", "logState",
         "dat", "seed", "seedRows", "pd", "guardOwned", "pruneHandles", "VERSION", "busIdx", "api", "log", "teardown",
-        "holdAsk", "installInputState",
+        "holdAsk", "installInputState", "installCounter", "counterTry",
     }
     local fields = 0
     for _ in pairs(tl) do fields = fields + 1 end

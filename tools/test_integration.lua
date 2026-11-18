@@ -208,7 +208,7 @@ eq(type(T.api), "table", "the public surface is listed")
 local missing = {}
 for _, name in ipairs(T.api) do if T[name] == nil then missing[#missing + 1] = name end end
 eq(#missing, 0, "documented api names exist: " .. table.concat(missing, ","))
-eq(T.VERSION, "1.6.6", "the version is stated once")
+eq(T.VERSION, "1.6.7", "the version is stated once")
 
 -- 1.6.5 test surface (audit P0-2, P0-3, P1-1): the runtime row, the per-frame
 -- decision chain and the release check are named seams now, so this suite drives
@@ -231,7 +231,7 @@ if type(RT) == "table" then
     eq(RT.jit == nil or type(RT.jit) == "string", true, "runtime jit is a name or absent")
 end
 -- E (P1-5): the documented surface is pinned, not grown by accident
-eq(#T.api, 29, "the public surface stays at the 29 documented names")
+eq(#T.api, 31, "the public surface stays at the 31 documented names")
 eq(type(T.VERSION) == "string" and T.VERSION:match("^%d+%.%d+%.%d+$") ~= nil, true,
     "VERSION is semantic: " .. tostring(T.VERSION))
 
@@ -334,6 +334,94 @@ do
     local first = T.inputState
     eq(T.installInputState(), first, "a second install keeps the live adapter")
     eq(T.installInputState() == first, true, "install is idempotent")
+end
+
+-- 1.6.7: the backpack stores weapon IDs as plain strings (MainWeapons is a
+-- TArray<string>, CurrentMainWeaponID a string). Reading them as objects used to
+-- throw inside the reader's pcall and silence both counter features with no log,
+-- so the shape is asserted through the real reader and the real module.
+do
+    local realFindAll = FindAllOf
+    local bp = { MainWeapons = { "BP_Weapon_Sword_C", "BP_Weapon_DualHook_C" },
+        CurrentWeaponIndex = 1, CurrentMainWeaponID = "BP_Weapon_DualHook_C" }
+    FindAllOf = function(name)
+        if name ~= "PBZBackPackSubsystem" then return {} end
+        return { { IsValid = function() return true end, GetName = function() return name end,
+            MainWeapons = bp.MainWeapons, CurrentWeaponIndex = bp.CurrentWeaponIndex,
+            CurrentMainWeaponID = bp.CurrentMainWeaponID } }
+    end
+    local w = T.weaponNow()
+    eq(type(w), "table", "the backpack answers the weapon reader")
+    eq(w and w.current, "BP_Weapon_DualHook_C", "the weapon in hand comes from the index and the string list")
+    eq(w and w.next, "BP_Weapon_Sword_C", "the next weapon wraps around the list")
+    local A = dofile("Scripts/ad_weapon.lua")
+    local o = A.new({ weapon = T.weaponNow, vitals = function() return { shachi = 50, max = 100 } end,
+        enemies = function() return {} end, log = function() end })
+    eq(o:held(), true, "the counter recognises the weapon in hand")
+    eq(o:enough(37), true, "50 % of the bar clears the 37 % floor")
+    eq(o:enough(60), false, "50 % of the bar does not clear a 60 % floor")
+    FindAllOf = realFindAll
+end
+
+-- 1.6.7: the counter layer. The two state machines are covered offline
+-- (tools/test_counter.lua, tools/test_weapon.lua); here the wiring is asserted:
+-- both features off change nothing, the kind decides from the row, and a stance
+-- that never starts hands the hit back to the ordinary chain.
+do
+    eq(type(T.counterKind), "function", "the counter kind is part of the runtime")
+    eq(type(T.counterTry), "function", "the counter seam is public")
+    eq(type(T.installCounter), "function", "the counter layer is installable")
+    local oldHook, oldShield = S.hookCounter, S.shieldCounter
+    local black = { t = "4", [1] = 1.0, [2] = 0.3 }
+    local normal = { [1] = 1.0, [2] = 0.3 }
+    local seedRow = { seed = true, [1] = 1.0, [2] = 0.3, [3] = true }
+    eq(T.counterKind(black), nil, "both features off: a black flash keeps its rule")
+    eq(T.counterKind(normal), nil, "both features off: a normal hit keeps its rule")
+    S.hookCounter = "on"
+    eq(T.counterKind(black), "black", "hook_counter on: a black flash asks for the counter")
+    eq(T.counterKind(normal), nil, "hook_counter on: a normal hit stays a parry")
+    S.hookCounter = "off"
+    S.shieldCounter = "on"
+    eq(T.counterKind(normal), "shield", "shield_counter on: a blockable hit asks for the counter")
+    eq(T.counterKind(seedRow), nil, "a dodge-only reference row is never countered")
+    eq(T.counterKind(black), nil, "shield_counter alone does not take a black flash")
+    S.shieldCounter = "off"
+    -- The state machines are the real modules; the weapon reader is replaced so the
+    -- gate can be opened without a backpack (its own cache would hide the change).
+    local realWeapon, realCounter, realStatic = T.weapon, T.counter, StaticFindObject
+    -- the Triangle action and the stance action resolve by name; nothing else does
+    StaticFindObject = function(path)
+        if type(path) == "string" and path:find("/Input/", 1, true) then
+            return { IsValid = function() return true end, GetFullName = function() return path end }
+        end
+        return nil
+    end
+    T.installCounter()
+    eq(type(T.counter), "table", "the timing module is installed")
+    T.weapon = { on = false,
+        held = function(self) return self.on end,
+        nextHeld = function() return false end,
+        enough = function() return true end,
+        shield = function() return nil end }
+    local now = os.clock()
+    eq(T.counterTry("black", now + 0.30, now, nil), nil, "wrong weapon: no counter")
+    T.weapon.on = true
+    eq(T.counterTry("black", now + 0.60, now, nil), "wait", "far from the hit: the counter waits")
+    eq(T.counterTry("black", now + 0.30, now, nil), "press", "inside the lead window: the counter presses")
+    local hold = T.counterHold
+    eq(type(hold), "table", "the press holds a stance")
+    eq(hold and hold.pressed, false, "the Triangle press waits one frame")
+    eq(T.counter:pending() ~= nil, true, "the state machine remembers the hit")
+    T.tickCounter(now)
+    eq(hold and hold.pressed, true, "the press happens one frame later")
+    eq(T.counter:pending() ~= nil, true, "the stance is still inside its hold time")
+    T.tickCounter(now + 0.2)
+    eq(T.counterHold, nil, "a stance that never starts is not held forever")
+    local st = T.counter:stats()
+    eq(st.presses, 1, "one press per offered hit")
+    eq(st.failed, 1, "the missing stance is recorded as a failure")
+    T.weapon, T.counter, StaticFindObject = realWeapon, realCounter, realStatic
+    S.hookCounter, S.shieldCounter = oldHook, oldShield
 end
 
 -- A (P0-3): the decision chain's early exits. The fake Deflect Component answers
@@ -553,6 +641,6 @@ eq(#gaps, 0, "the whole test surface is present: " .. table.concat(gaps, ","))
 
 if T.ledFlush then T.ledFlush() end
 local led = read("auto_defense_ledger.txt")
-assert(led:find("v1.6.6", 1, true), "the ledger states the running version: " .. led:sub(1, 200))
+assert(led:find("v1.6.7", 1, true), "the ledger states the running version: " .. led:sub(1, 200))
 n = n + 1
 print("INTEGRATION PASS " .. n .. " assertions")
