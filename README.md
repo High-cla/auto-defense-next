@@ -6,9 +6,10 @@
 
 - **自动弹反**：由 `ReceiveFrames` 的真实命中帧驱动，提前量在 auto 模式下按实测窗口自适应（最多短窗优于宽窗），未学习到的招式退回保守窗口。
 - **自动闪避**：红/黑闪时序判定 + 招式时间线，检查无敌帧覆盖；带闪避间隔、动作锁避让与失败丢弃。
+- **缺帧冷启动保护**：`seed_fallback=record` 默认只记录严格匹配敌人、招式和距离的参考时机；切到 `on` 才启用只闪避的参考种子，真实 ReceiveFrame 与玩家学习数据始终优先。
 - **抓投应对**：独立提前量，已收录的非抓投招式不会误用抓投提前量。
 - **防守让位**：`pbzpd=auto` 检测 PBZPerfectDefense 的配置文件与启用状态，自动交出 guard 相关控制，保留闪避与时间线闪避。
-- **原生菜单**：41 个字段（39 个可编辑），热改约 1 秒内生效；重启项在菜单与本文档中都标注。
+- **原生菜单**：42 个字段（40 个可编辑），热改约 1 秒内生效；重启项在菜单与本文档中都标注。
 - **可观测**：防守决策账本、进程内事件环、perf 分位数与统一错误通道。
 
 ## 安装
@@ -36,6 +37,7 @@
 | `min_gap_ms` | 120 | 弹反最小间隔 |
 | `pbzpd` | auto | PBZPerfectDefense 让位（auto / yield / off，重启项） |
 | `data` | on | 加载招式数据快照（重启项） |
+| `seed_fallback` | record | 缺帧参考种子：`off` / `record`（只观察）/ `on`（只闪避） |
 | `perf` | off | 性能日志：分段 p50/p95/p99 |
 | `events` | on | 事件日志 `ad_events.txt` |
 | `ledger` | on | 决策账本 `auto_defense_ledger.txt` |
@@ -44,7 +46,7 @@
 
 ## 架构
 
-主运行时 `Scripts/main.lua`（约 5,240 行）+ 11 个边界模块，决策与执行分离：策略产出防守意图 → `ad_policy` 统一裁决 → `ad_input` 受控入口注入按键，按键/标签/解除都走同一道门。
+主运行时 `Scripts/main.lua`（约 5,300 行）+ 12 个边界模块，决策与执行分离：策略产出防守意图 → `ad_policy` 统一裁决 → `ad_input` 受控入口注入按键，按键/标签/解除都走同一道门。
 
 | 模块 | 职责 |
 |---|---|
@@ -53,6 +55,7 @@
 | `ad_policy` | 共享规则：意图 → 允许/拒绝 + 拒绝原因 |
 | `ad_input` | 受控入口：先问规则再执行，统计 ask/deny |
 | `ad_inputstate` | 游戏自己的「按住没按住」答案（`IsHolding`/`GetHoldTime`）+ 键判回落；注入窗口内不采信「按住」 |
+| `ad_seed` | 纯参考种子合并器：敌人 + 招式 + 距离精确匹配，复制后合并，已有/学习行优先 |
 | `ad_async` | 事件环（512、丢新不丢旧）+ 每 tick 预算的预热任务 |
 | `ad_compat` | 运行时兼容层：5.4 专有调用（`gc` 选项、`atan2`）与版本探测，缺失时调用点自行降级 |
 | `ad_json` | 严格扁平 JSON（菜单配置用） |
@@ -60,7 +63,7 @@
 | `ad_menu_bridge` | 菜单保存名折叠的兼容垫片（镜像文件名，不重复实现写盘） |
 | `toast` | 屏幕提示 |
 
-数据层：`data/ad_data.lua` 是冻结的招式快照（build 26367565），提供命中时段、无敌窗、真实射程、爆风半径、抓投标记等；读取走名称归一化，未命中时保持原行为。
+数据层：`data/ad_data.lua` 保留冻结的 PBZAssist 招式快照（build 26367565），并以独立 `reference_noframe` 命名空间携带少量有来源的缺帧参考时机；参考层不替换原快照，只在精确敌人/招式/距离匹配时交给 `ad_seed`。
 
 ## 观测产物
 
@@ -94,7 +97,7 @@ git commit                   # pre-commit 自动跑同一道门禁
 - [ARCHITECTURE.md](docs/ARCHITECTURE.md)：系统边界、模块关系、启动顺序、每帧数据流和副作用门
 - [DEFLECT-STATE-MACHINE.md](docs/DEFLECT-STATE-MACHINE.md)：ReceiveFrame 候选、红招优先、闪避/弹反分支与 guard 生命周期
 - [RUNTIME-LIFECYCLE.md](docs/RUNTIME-LIFECYCLE.md)：游戏线程、主循环调度、Hook 重试/注销缺口、暂停恢复与资源管理
-- [CONFIGURATION-REFERENCE.md](docs/CONFIGURATION-REFERENCE.md)：41 个配置项的中英说明、类型、默认值、范围、持久化和 TXT→JSON 迁移
+- [CONFIGURATION-REFERENCE.md](docs/CONFIGURATION-REFERENCE.md)：42 个配置项的中英说明、类型、默认值、范围、持久化和 TXT→JSON 迁移
 - [ASYNC-OBSERVABILITY.md](docs/ASYNC-OBSERVABILITY.md)：事件环契约、事件表、sink 格式、perf 与错误通道
 - [MENU-INTEGRATION.md](docs/MENU-INTEGRATION.md)：菜单字段、重启项、只读项、集成链
 - [UPSTREAM-API-GUIDE.md](docs/UPSTREAM-API-GUIDE.md)：UE4SS Lua API、PBZModLoader 反射 SDK、PBZ USMAP 工具链及本模组的 API 优化记录
@@ -125,9 +128,10 @@ PBZ Auto Defense is an automatic defense mod for **Phantom Blade Zero**. Built w
 
 - **Automatic parry:** Uses runtime-reported hit frames. Automatic lead mode adapts to learned timing windows; unknown moves use a conservative fallback.
 - **Automatic dodge:** Evaluates red- and black-flash attacks against move timelines and dodge invulnerability windows. It also accounts for dodge spacing, action locks, and failed inputs.
+- **No-frame cold-start safety:** `seed_fallback=record` only reports exact actor/ability/distance matches by default. `on` enables dodge-only reference seeds; real ReceiveFrames and player-learned rows keep priority.
 - **Grab response:** Uses a separate lead-time setting so ordinary attacks do not inherit grab timing.
 - **Defense hand-off:** Can detect the configuration and enabled state of PBZPerfectDefense and yield guard-related control when appropriate. This is cooperative configuration-based behavior, not a cross-mod or cross-process mutex.
-- **Native mod-menu settings:** Integrates with the in-game mod menu. There are 41 configuration fields, 39 of which are editable in the menu; some settings require a restart.
+- **Native mod-menu settings:** Integrates with the in-game mod menu. There are 42 configuration fields, 40 of which are editable in the menu; some settings require a restart.
 - **Diagnostics:** Optional defense decision ledger, event log, performance percentile logging, and a unified error channel.
 
 The mod does not guarantee a successful defense against every attack. Timing data is learned during play and may be incomplete on a fresh installation.
@@ -164,6 +168,7 @@ Recommended: download the latest package from the [GitHub Releases page](https:/
 | `min_gap_ms` | 120 | Minimum interval between parries |
 | `pbzpd` | auto | PBZPerfectDefense hand-off: `auto`, `yield`, or `off` (restart required) |
 | `data` | on | Load the bundled move-data snapshot (restart required) |
+| `seed_fallback` | record | No-frame reference seeds: `off`, observe-only `record`, or dodge-only `on` |
 | `perf` | off | Write performance measurements |
 | `events` | on | Write the event log |
 | `ledger` | on | Write the defense decision ledger |

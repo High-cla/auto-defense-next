@@ -73,4 +73,14 @@ eq(args, 5, "GetNearestValidReceivedFrame takes the five SDK arguments")
 eq(call:match("^%s*360%.0") ~= nil, true, "the first argument is the deflect angle")
 eq(call:match(",%s*%-1%s*,") ~= nil, true, "the current-handle sentinel stays -1")
 
+-- 4. A real ReceiveFrame outranks a reference seed, and a seed action remains
+-- visible in the decision reason. These source-order contracts prevent a later
+-- refactor from restoring the duplicate press that the runtime pairing avoids.
+local seedPair = src:find("elseif h.seed and not q.tapped[j]", 1, true)
+local pairCall = seedPair and src:find("and tl.pairTimeline", seedPair, true)
+local seedReason = src:find("if h.seed then what = what .. \" (reference seed)\" end", 1, true)
+eq(seedPair ~= nil, true, "seed rows have a real-frame priority branch")
+eq(pairCall ~= nil and pairCall > seedPair, true, "seed branch asks the existing frame pairing before pressing")
+eq(seedReason ~= nil, true, "a seed-triggered action names its source")
+
 print("API_CONTRACT PASS " .. n .. " assertions")

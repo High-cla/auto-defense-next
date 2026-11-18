@@ -7,7 +7,7 @@
     "en": "Lua defense runtime with native Mods Menu config. Restart-only fields are marked. Free-text fields are read-only.",
     "zh-Hans": "保留 Lua 防守运行时，接入原生模组菜单配置。重启项已标注；两个自由文本项只读。"
   },
-  "version": "1.6.5",
+  "version": "1.6.6",
   "settings": [
     {
       "key": "perfect",
@@ -528,6 +528,25 @@
         "en": "Saved now; restart the game to apply safely.",
         "zh-Hans": "保存后重启游戏安全生效。"
       }
+    },
+    {
+      "key": "seed_fallback",
+      "type": "choice",
+      "label": {
+        "en": "seed_fallback",
+        "zh-Hans": "缺帧参考种子"
+      },
+      "default": "record",
+      "restart": false,
+      "help": {
+        "en": "off disables it; record logs exact actor/ability matches without pressing; on enables reference-seeded dodges. Requires data on.",
+        "zh-Hans": "off 关闭；record 只记录精确敌人/招式匹配而不按键；on 启用参考种子闪避。需要 data 开启。"
+      },
+      "options": [
+        "off",
+        "record",
+        "on"
+      ]
     },
     {
       "key": "data_tags",

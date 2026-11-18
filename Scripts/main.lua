@@ -217,6 +217,7 @@ local settings = { perfect = false, perfectMode = "give", blackFlash = "dodge", 
     -- (receipt / receipt_retry) and count everything in the ledger
     readFrames = true, parryLeadCfg = "auto", dodgeLead = 0.08, dodgeGap = 0.12, dodgeIframe = 0.26,
     pairFrames = true, receipt = false, receiptRetry = false, ledger = true, latency = true, data = true, dataOff = {}, dataTags = false,
+    seedFallback = "record",
     -- 1.4.4, from PBZAssist 1.3.3: min_gap_ms between two deflect presses, the
     -- grab's own lead, dodging again while the last dodge still runs (dodge_cd),
     -- pressing into an action lock (busy_skip), holding the guard through a
@@ -303,6 +304,7 @@ do
             if k == "flurry_guard" then settings.flurryGuard, settings.timing2Line = v ~= "off", true end
             if k == "data" then settings.data, settings.dataLine = v ~= "off", true end
             if k == "data_tags" then settings.dataTags, settings.dataLine = v ~= "off", true end
+            if k == "seed_fallback" and (v == "off" or v == "record" or v == "on") then settings.seedFallback = v end
             if k == "data_off" then
                 settings.dataOff = {}
                 local value = line:match("^%s*data_off%s*=%s*(.-)%s*$") or ""
@@ -393,6 +395,8 @@ local function saveSettings()
     f:write("read_frames = " .. (settings.readFrames and "on" or "off") .. "\n")
     f:write("data = " .. (settings.data and "on" or "off") .. "\n")
     f:write("data_tags = " .. (settings.dataTags and "on" or "off") .. "\n")
+    f:write("# seed_fallback: off, record (log exact matches only), or on (dodge from reference no-frame seeds)\n")
+    f:write("seed_fallback = " .. (settings.seedFallback or "record") .. "\n")
     local dataOff = {}
     for k in pairs(settings.dataOff or {}) do dataOff[#dataOff + 1] = k end
     table.sort(dataOff)
@@ -509,7 +513,7 @@ local tl = { BLACK_LEAD = 0.5, GIVE_RELEASE = 0.6, BULLET_HOLD = 1.2, TORNADO_MO
 -- traceback the first time it is seen, so a broken hook is visible with debug = off
 -- (until 1.6.2 those three went to attackLog, which returns at once unless DEBUG).
 do
-    tl.VERSION = "1.6.5"
+    tl.VERSION = "1.6.6"
     tl.errs = {}
     function tl.err(what, err)
         local n = (tl.errs[what] or 0) + 1
@@ -674,6 +678,7 @@ do
         if not (okF and type(d) == "table") then D.why = "no data file" return end
         local b = tonumber(d.build)
         D.build = b
+        D.referenceNoFrame = type(d.reference_noframe) == "table" and d.reference_noframe or nil
         for k, v in pairs(d.montage or {}) do
             local mb, ab = base(k), base(v)
             if mb and ab then mont[mb] = ab amt[ab] = amt[ab] or mb end
@@ -924,6 +929,32 @@ do
     else
         log("data: not used (%s)", D.why)
     end
+end
+-- AutoPerfectDefense 1.1.4 supplied three semantic no-frame timing facts. They
+-- stay in a pure, actor-qualified overlay: the PBZAssist snapshot and global
+-- hitTimes remain authoritative and unmodified. record is the shipped mode.
+do
+    local raw = settings.data and tl.dat and tl.dat.ready and tl.dat.referenceNoFrame or nil
+    if raw then
+        local okM, mod = pcall(dofile, MOD_DIR .. "Scripts/ad_seed.lua")
+        local okS, seed = false, mod
+        if okM and type(mod) == "table" and type(mod.new) == "function" then
+            okS, seed = pcall(mod.new, raw)
+        end
+        if okS and type(seed) == "table" then
+            tl.seed = seed
+            log("reference seeds: %d ready, %d rejected (%s, mode %s)", seed.valid or 0, seed.invalid or 0,
+                tostring(raw.source or "unknown"), settings.seedFallback)
+        else
+            log("reference seeds: not used (%s)", tostring(okM and seed or mod))
+        end
+    end
+end
+tl.seedRows = function(ability, actorClass, distance, existing)
+    if settings.seedFallback == "off" or not settings.data or not tl.seed then return existing or {}, 0, {} end
+    local merged, added, candidates = tl.seed:merge(ability, actorClass, distance, existing)
+    if settings.seedFallback == "on" then return merged, added, candidates end
+    return existing or {}, added, candidates -- record observes, but cannot activate a row
 end
 -- a grab (GA_*_GEx*: grab, then the execution) cannot be parried; its frame
 -- comes tl.grabWindow at most after the start and is dodged (test10d: Scavenger
@@ -2633,16 +2664,38 @@ local tlStarted = {} -- ability address -> os.clock() it was last queued (hook a
 local function queueTimeline(ab, name, actor, pawn, via)
     local base = RT.bname(name) or name
     local hits = hitTimes[base]
-    if not hits or not actor or not valid(pawn) then return nil end
-    local a = ab:GetAddress()
-    if tlStarted[a] and os.clock() - tlStarted[a] < 0.3 then return "" end
-    -- the memo moves below the checks: a "too far"/"not facing" miss used to
-    -- swallow the next 0.3 s of announcements (audit P2-6)
+    if not actor or not valid(pawn) then return nil end
     local okD, dist = pcall(function() return actor:GetDistanceTo(pawn) end)
     dist = okD and tonumber(unwrap(dist)) or nil
     if not dist or dist > TL_NEAR then
         return string.format("  (timeline: too far, %s cm)", dist and string.format("%.0f", dist) or "?")
     end
+    -- The reference overlay is exact actor + ability and copy-on-write. record
+    -- observes candidates but cannot hand a row to the decision path; on adopts
+    -- only this activation's merged list. Global hitTimes is never changed.
+    local okClass, actorClass = pcall(RT.classOf, actor)
+    actorClass = okClass and short(actorClass) or nil
+    local merged, added, candidates = tl.seedRows(base, actorClass, dist, hits)
+    if settings.seedFallback == "record" and #candidates > 0 then
+        local ids = {}
+        for i = 1, #candidates do ids[i] = tostring(candidates[i].id) end
+        local recordKey = tostring(actorClass) .. "|" .. tostring(base) .. "|" .. table.concat(ids, ",") .. "|" .. tostring(added)
+        tl.seedRecorded = tl.seedRecorded or {}
+        if not tl.seedRecorded[recordKey] then
+            tl.seedRecorded[recordKey] = true
+            log("reference seed record: %s %s at %.0f cm, candidates %s, new %d (no action)",
+                tostring(actorClass), tostring(base), dist, table.concat(ids, ","), added)
+            tl.led("reference seed record: %s %s candidates %s new %d, no action",
+                tostring(actorClass), tostring(base), table.concat(ids, ","), added)
+        end
+    elseif settings.seedFallback == "on" then
+        hits = merged
+    end
+    if not hits or #hits == 0 then return nil end
+    local a = ab:GetAddress()
+    if tlStarted[a] and os.clock() - tlStarted[a] < 0.3 then return "" end
+    -- the memo moves below the checks: a "too far"/"not facing" miss used to
+    -- swallow the next 0.3 s of announcements (audit P2-6)
     -- an attack with a black flash is followed whichever way the enemy faces:
     -- YouLong Skill_02_JumpOut starts under water facing away and turns in
     -- the leap (2026-11-03: skipped at 11 m, -298)
@@ -3599,6 +3652,13 @@ do
                     and tl.pairTimeline(q.name, (h[1] - t) / rate, nowOf(pawn)) then
                     q.tapped[j] = true
                     tl.led("timeline %s@%.2f: paired with the announced frame, not pressed", q.name, h[1])
+                elseif h.seed and not q.tapped[j]
+                    and t >= h[1] - TL_DODGE_LEAD * math.min(rate, 1)
+                    and tl.pairTimeline(q.name, (h[1] - t) / rate, nowOf(pawn)) then
+                    -- A real ReceiveFrame is stronger evidence than a reference seed.
+                    -- Let the normal frame path own this hit instead of pressing twice.
+                    q.tapped[j] = true
+                    tl.led("timeline %s@%.2f (reference seed): paired with the announced frame, not pressed", q.name, h[1])
                 elseif dodgeIt and h[5] then
                     if not q.tapped[j] and t >= h[1] then
                         q.tapped[j] = true
@@ -3615,6 +3675,7 @@ do
                     -- already past this hit (detected late): nothing
                     if t < h[1] + math.max(h[2], 0.05) then
                         local what = string.format("%s@%.2f for %.2f", q.name, t, h[1])
+                        if h.seed then what = what .. " (reference seed)" end
                         if dodgeIt and h.t == "4" then
                             -- the key the passive still holds keeps the guard up, and a
                             -- dodge does not come out of a raised guard
@@ -5216,7 +5277,7 @@ do
     tl.api = {
         "tickReceipt", "fxScan", "fxDue", "fxClear", "pressTap", "releaseHeldKey",
         "menu", "input", "policy", "bus", "warm", "led", "ledFlush", "emit", "err", "logState",
-        "dat", "pd", "guardOwned", "pruneHandles", "VERSION", "busIdx", "api", "log", "teardown",
+        "dat", "seed", "seedRows", "pd", "guardOwned", "pruneHandles", "VERSION", "busIdx", "api", "log", "teardown",
         "holdAsk", "installInputState",
     }
     local fields = 0
@@ -5233,7 +5294,7 @@ end
     _G.__TL, _G.__HK, _G.__S = tl, hk, settings
     -- audit P0-3: the decision chain had no offline coverage at all
     _G.__DECIDE, _G.__CHECK_RELEASE = tl.decide, tl.checkRelease
-    _G.__TEARDOWN = tl.teardown
+    _G.__QUEUE_TIMELINE, _G.__TEARDOWN = queueTimeline, tl.teardown
     _G.__RUNTIME = {
         version = _VERSION, jit = rawget(_G, "jit") and rawget(_G, "jit").version or nil,
         compat = RT.compat ~= nil,

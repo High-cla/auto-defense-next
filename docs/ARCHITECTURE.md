@@ -30,7 +30,8 @@ flowchart TD
     JSON["Scripts/ad_json.lua"] --> CONFIG
     CONFIG --> MAIN
     QUERY["Scripts/ad_query.lua<br/>read-only UObject queries"] --> MAIN
-    DATA["data/ad_data.lua<br/>bundled move snapshot"] --> MAIN
+    DATA["data/ad_data.lua<br/>frozen snapshot + reference overlay"] --> MAIN
+    SEED["Scripts/ad_seed.lua<br/>pure no-frame seed merge"] --> MAIN
     TL["Scripts/ad_timeline.lua<br/>learned timeline table"] --> MAIN
     POLICY["Scripts/ad_policy.lua<br/>allow / deny rules"] --> INPUT["Scripts/ad_input.lua<br/>controlled side effects"]
     INPUT --> MAIN
@@ -52,13 +53,14 @@ flowchart TD
 | Scripts/ad_policy.lua | 纯规则判断：intent → allow/deny + reason；记录拒绝统计 | 直接调用游戏对象或执行输入 |
 | Scripts/ad_input.lua | guard press/release、stance end、tag、input injection 的统一门 | 自己重新实现防守算法；绕过 policy 直接操作游戏 |
 | Scripts/ad_inputstate.lua | 读游戏自己的 hold 状态（`IsHolding/GetHoldTime`）并按注入窗口裁定是否采信；失败一律返回 nil | 缓存过期状态、把本模组注入的按键当成玩家按住、从 hook 里写游戏状态 |
+| Scripts/ad_seed.lua | 纯 reference_noframe 索引与复制后合并：敌人类 + Ability + 距离精确匹配，时间邻近去重 | 读取游戏对象、持有攻击生命周期、修改全局 hitTimes 或执行输入 |
 | Scripts/ad_async.lua | 只读事件环和预算化 warm-up 队列 | 在 hook 里直接做无界 IO/计算或改变防守判断 |
 | Scripts/ad_json.lua | 受限扁平 JSON 编解码 | 接受任意嵌套 JSON 或承担 schema policy |
 | Scripts/menu_config.lua | 配置 schema、校验、单位映射、持久化、热应用与 pending restart 状态 | 控制战斗算法或取代 Bridge 的菜单写入责任 |
 | Scripts/ad_menu_bridge.lua | 兼容 Bridge pending/saved 文件名 | 解析/改写 JSON，成为第二配置写入者 |
 | Scripts/ad_compat.lua | LuaJIT/Lua 5.4 差异封装 | 散落多个运行时版本分支 |
 | Scripts/toast.lua | 一次性屏幕提示与对应 delayed action 管理 | 常驻高频显示轮询 |
-| data/ad_data.lua | build 绑定的打包招式数据快照 | 动态游戏 API 或每帧生成的数据源 |
+| data/ad_data.lua | build 绑定的 PBZAssist 招式快照；独立 `reference_noframe` 命名空间保存带来源的少量缺帧参考时机 | 动态游戏 API、每帧生成的数据源，或用参考层替换原快照 |
 
 tools/ 中脚本只属于离线测试、检查、打包和发布流程，不在游戏运行时加载。
 
@@ -71,7 +73,7 @@ tools/ 中脚本只属于离线测试、检查、打包和发布流程，不在�
 3. 尝试加载 ad_compat，记录 Lua 版本/JIT 信息；建立 runtime helpers。
 4. 建立内存 settings 默认值，读取旧 auto_defense.txt 中被识别的字段。
 5. 初始化 ad_json、可选 ad_menu_bridge shim 和 menu_config；调用 hk.menu:load(true) 读取已有 JSON，或仅在 JSON 不存在时把当前 settings 导入成首份 JSON。
-6. 加载/构造事件观察、数据快照、命中帧和时间轴相关状态。
+6. 加载/构造事件观察、数据快照、命中帧和时间轴相关状态；把 `reference_noframe` 交给纯 `ad_seed` 适配器，失败时保持无参考种子的旧行为。
 7. 加载 ad_policy 并绑定到 ad_input；把主脚本原始 press/release/end-stance 函数替换为受控入口。
 8. 构造 warm-up、performance、watchdog 和 player state 运行结构。
 9. 调用 tl.start() 启动主循环；注册 F7/F8/F9/F6 热键。
@@ -130,7 +132,8 @@ tl.decide 的固定顺序：
 
 - **ReceiveFrames / Deflect Component：** GetNearestValidReceivedFrame 查询最近有效命中句柄；read_frames 允许进一步读取真实命中时间与类型。
 - **Enemy ability / montage timeline：** 攻击 hook 与跟踪器识别敌方 Ability 和动画时间线，结合打包/学习的数据估计后续命中时刻。
-- **Game data snapshot：** data/ad_data.lua 带有 build 标识，提供招式、闪避、无敌、抓取和标签等数据。
+- **Game data snapshot：** data/ad_data.lua 带有 build 标识，冻结的 PBZAssist 表提供招式、闪避、无敌、抓取和标签等数据。
+- **Reference no-frame overlay：** 同一文件的 `reference_noframe` 是独立、有来源的少量参考时机。`record` 只报告严格匹配；`on` 仅按敌人类 + Ability + 距离合并只闪避行，已有/学习行和真实 ReceiveFrame 优先。
 - **Player state：** 当前 Pawn、能力输入组件、玩家动作锁、无敌窗、guard state、PD ownership 等用于过滤与路由。
 
 ### Decision → policy → execution / 决策到副作用
@@ -163,10 +166,11 @@ ad_async 使用容量 512 的 ring buffer 收集只读事件，每 tick 最多 d
 - main.lua 拥有 combat state、临时 pending 输入、handle caches、hook status、data indexes 和 ledger。
 - ad_policy 拥有 allow/deny 规则与拒绝计数。
 - ad_input 拥有 side-effect entry bindings，不拥有具体决策。
+- ad_seed 只拥有规范化索引和纯合并规则；main.lua 继续拥有 q.tapped、ReceiveFrame 配对和时间轴生命周期。
 - menu_config 的 raw 和 lastText 对应最近一份通过验证的 JSON；pending 对应本次运行需重启的字段。
 - ad_menu_bridge 只拥有自己的文件名镜像统计和轮询节流，不拥有配置语义。
 
-tl.api 是显式公开给其他模块/测试的表面（当前 24 个名称）；未列入 tl.api 的字段均为内部实现细节。测试全局只在带 .ad-menu-test-only 标记的隔离副本中导出，正常安装不暴露这些全局。
+tl.api 是显式公开给其他模块/测试的表面（当前 29 个名称）；未列入 tl.api 的字段均为内部实现细节。测试全局只在带 .ad-menu-test-only 标记的隔离副本中导出，正常安装不暴露这些全局。
 
 ## 7. Persistence map / 持久化映射
 
@@ -175,7 +179,7 @@ tl.api 是显式公开给其他模块/测试的表面（当前 24 个名称）�
 | pbz-auto-defense.config.json | Native menu/热键配置的权威持久化 |
 | auto_defense.txt | 旧版 TXT 导入和回滚副本 |
 | hit_times.txt / learned timing artifacts | 游戏攻击时间轴/学习相关数据（按主脚本加载路径管理） |
-| data/ad_data.lua | 随发行包提供的 build-bound game-data snapshot |
+| data/ad_data.lua | 随发行包提供的 build-bound PBZAssist snapshot + provenance-bearing `reference_noframe` overlay |
 | auto_defense_log.txt | 启动、hook、配置和错误日志 |
 | auto_defense_ledger.txt | 防守候选、时机、意图与输入结果 |
 | ad_events.txt | 批量写入的只读事件观察 |

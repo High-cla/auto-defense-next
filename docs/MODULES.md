@@ -1,4 +1,4 @@
-# Module layout (1.6.5)
+# Module layout (1.6.6)
 
 Decision and execution order is unchanged. What moved is **where each concern lives**
 and **which door every side effect goes through**. Behaviour changes are listed in the
@@ -6,18 +6,19 @@ CHANGELOG, not here.
 
 | File | Lines | Owns |
 | --- | ---: | --- |
-| `Scripts/main.lua` | 5241 | hooks, tick orchestration, the decision chain (`tl.decide`), parry/dodge mechanics, ledger, perf, data loader |
+| `Scripts/main.lua` | 5302 | hooks, tick orchestration, the decision chain (`tl.decide`), parry/dodge mechanics, ledger, perf, data loader |
 | `Scripts/ad_query.lua` | 176 | read-only game queries: `valid/name/unwrap/num/prop/baseName/obj/tag/tagLibrary/component/ascOf/nowOf` (log injected); `tag` memoised, `baseName` is the one name rule |
 | `Scripts/ad_compat.lua` | 61 | the runtime compat layer: `gc(mode)` / `atan(y, x)` / `version()` / `hasJit()` — the two Lua-5.4-only calls live here and nowhere else |
 | `Scripts/ad_timeline.lua` | 60 | the learned timeline table **and** its count (`table/count/put/add/addRow/removeRow/get/recount/each`) |
 | `Scripts/ad_policy.lua` | 47 | the shared rules: `ask(intent)` → allow/deny + reason, `who()`, per-reason counters |
 | `Scripts/ad_input.lua` | 75 | the controlled entry: `pressGuard/releaseGuard/endStance/tag/inject` — asks the rules, then calls the registered mechanic; `stats()` |
 | `Scripts/ad_inputstate.lua` | 110 | the game's own hold answer: `IsHolding`/`GetHoldTime` through the pawn's input component, `pick(held, keyHeld, injecting)` precedence, `read()` answers nil instead of guessing, and a self-revert (`dead`/`disable(why)`, 3 unfixable faults in a row or one manual call) after which `read` neither answers nor touches the game; readers injected, so the file has no game API and runs offline |
+| `Scripts/ad_seed.lua` | 105 | pure, stateless no-frame seed index/merger: exact normalized actor + ability match, inclusive distance gate, ±0.15 s dedupe, copy-on-write rows marked `source="seed"`; malformed reference data is rejected and existing/player rows keep priority |
 | `Scripts/ad_async.lua` | 104 | in-process read-only event bus + budgeted warm-up queue |
-| `Scripts/ad_json.lua` / `Scripts/menu_config.lua` | 123 / 246 | strict flat JSON; native Mods Menu adapter (invariants, read-back, unknown-key naming) |
+| `Scripts/ad_json.lua` / `Scripts/menu_config.lua` | 123 / 247 | strict flat JSON; native Mods Menu adapter (invariants, read-back, unknown-key naming) |
 | `Scripts/ad_menu_bridge.lua` | 158 | the Mods Menu save-name shim: mirrors the menu's folded `pending-`/`saved-` names into the spelling the bridge watches and back; never writes the config |
 | `Scripts/toast.lua` | 208 | the toast notifications: one Delayed Action per show (retriggerable where available), handle kept and cancelled; never a resident loop |
-| `data/ad_data.lua` | 1.16 MB | generated game-data snapshot (the runtime data layer), build=26367565. Regenerating it also rewrites `data/ad_data_meta.txt`, but the source (`Mods/PBZAssist/Scripts/enemy_data.lua`) is gone as of 2026-11-16: the snapshot is frozen and still valid, a new one needs a PBZAssist install. |
+| `data/ad_data.lua` | 1.16 MB | frozen PBZAssist game-data snapshot, build=26367565, plus the separate provenance-bearing `reference_noframe` overlay. Existing PBZAssist tables remain the runtime data layer; regenerating them still needs the missing `Mods/PBZAssist/Scripts/enemy_data.lua`, while `tools/make_ad_data.lua` owns the additive reference overlay. |
 | `tools/out/ad_data_core.lua` + `ad_data_meta.txt` | 199 KB | reduced snapshot and its build/count meta for tooling and audit only - not loaded at runtime |
 
 ## Intents and rules
@@ -37,9 +38,10 @@ Installation is `pcall`-guarded: a failure leaves the plain functions in place, 
 
 ## Contract notes
 
-- **Public surface**: `tl.api` lists the 27 names other code or tests may use; the count is
+- **Public surface**: `tl.api` lists the 29 names other code or tests may use; the count is
   logged at startup (`tl api: N public names of M fields`) so a growing API is visible.
   Everything else on `tl` is internal and may be renamed.
+- **Reference seeds stay bounded**: `tl.seedRows(ability, actorClass, distance, existing)` is the only runtime seam. `off` and unavailable data are no-ops; `record` reports candidates but returns the original rows; `on` returns a copied merge. `ad_seed` owns no attack lifecycle state, never mutates `hitTimes`, and every seed row is dodge-only until a real ReceiveFrame pairs it.
 - **Borrowed answers revert**: the game's hold answer is an optimisation, never a
   dependency. `tl.installInputState()` is idempotent (it returns the instance already
   installed) and latches a load failure in `tl.inputStateErr`, so a build where the field
@@ -50,7 +52,7 @@ Installation is `pcall`-guarded: a failure leaves the plain functions in place, 
   returns the key answer without calling the game again, and `stats()` still counts asks.
 - **Test seams** (only inside a copy carrying the `.ad-menu-test-only` marker):
   `_G.__TL/__HK/__S`, `_G.__DECIDE` (= `tl.decide(p, deflect, input, now)`),
-  `_G.__CHECK_RELEASE`, `_G.__RUNTIME` (`version`/`jit`/`compat`). A normal install
+  `_G.__CHECK_RELEASE`, `_G.__QUEUE_TIMELINE`, `_G.__RUNTIME` (`version`/`jit`/`compat`). A normal install
   exposes no globals.
 - **Error channel**: every action call site goes through `tl.try(what, fn, ...)`; a failure is
   logged the first 3 times per `what` (traceback on the first) and emitted as `error` on the

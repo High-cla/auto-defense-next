@@ -66,7 +66,7 @@ local initial = read(H.menu.path)
 write("initial-menu.config.json", initial)
 -- the shipped config is the shipped defaults (1.6.4); keep in sync with the descriptor
 eq(S.perfect, false); eq(S.parryReach, 0.5); eq(S.guardReleaseAfter, 0.5); eq(S.guardReleaseCombatEnd, 0.5)
-eq(S.keys.parry, "F9")
+eq(S.keys.parry, "F9"); eq(S.seedFallback, "record", "reference seeds default to observation only")
 eq(_G.__LOOP_MODE, "frame", "frame scheduler preferred when EngineTick is available")
 eq(_G.__LOOP_FRAMES, 1, "defense loop runs once per engine frame")
 assert(_G.__LOOP() == false, "tick without a player is safe")
@@ -208,7 +208,7 @@ eq(type(T.api), "table", "the public surface is listed")
 local missing = {}
 for _, name in ipairs(T.api) do if T[name] == nil then missing[#missing + 1] = name end end
 eq(#missing, 0, "documented api names exist: " .. table.concat(missing, ","))
-eq(T.VERSION, "1.6.5", "the version is stated once")
+eq(T.VERSION, "1.6.6", "the version is stated once")
 
 -- 1.6.5 test surface (audit P0-2, P0-3, P1-1): the runtime row, the per-frame
 -- decision chain and the release check are named seams now, so this suite drives
@@ -219,6 +219,7 @@ local RT = _G.__RUNTIME
 if type(RT) ~= "table" then gaps[#gaps + 1] = "__RUNTIME" end
 if type(_G.__DECIDE) ~= "function" then gaps[#gaps + 1] = "__DECIDE" end
 if type(_G.__CHECK_RELEASE) ~= "function" then gaps[#gaps + 1] = "__CHECK_RELEASE" end
+if type(_G.__QUEUE_TIMELINE) ~= "function" then gaps[#gaps + 1] = "__QUEUE_TIMELINE" end
 if type(T.ledOnce) ~= "function" then gaps[#gaps + 1] = "tl.ledOnce" end
 
 -- B (P0-2): the runtime row states what the chunk runs on, so a 5.4-only call
@@ -230,9 +231,43 @@ if type(RT) == "table" then
     eq(RT.jit == nil or type(RT.jit) == "string", true, "runtime jit is a name or absent")
 end
 -- E (P1-5): the documented surface is pinned, not grown by accident
-eq(#T.api, 27, "the public surface stays at the 27 documented names")
+eq(#T.api, 29, "the public surface stays at the 29 documented names")
 eq(type(T.VERSION) == "string" and T.VERSION:match("^%d+%.%d+%.%d+$") ~= nil, true,
     "VERSION is semantic: " .. tostring(T.VERSION))
+
+-- Reference no-frame fallback: record reports exact matches but never returns an
+-- actionable row; on adopts a copy; off hides both rows and diagnostics.
+do
+    eq(type(T.seed), "table", "reference seed merger installed with data on")
+    eq(type(T.seedRows), "function", "seed mode seam is public")
+    local oldMode = S.seedFallback
+    S.seedFallback = "record"
+    local recordRows, recordAdded, recordCandidates = T.seedRows(
+        "GA_BombMan_Skill_01_C", "BP_Monster_BombManRespawn_C", 300, {})
+    eq(#recordRows, 0, "record cannot hand an actionable row to the caller")
+    eq(recordAdded, 2, "record reports the two BombMan seed times")
+    eq(#recordCandidates, 2, "record keeps provenance candidates visible")
+    local class = { IsValid = function() return true end, GetAddress = function() return 710 end,
+        GetFName = function() return { ToString = function() return "BP_Monster_BombManRespawn_C" end } end }
+    local actor = { GetDistanceTo = function() return 300 end, GetClass = function() return class end }
+    local pawn = { IsValid = function() return true end, GetAddress = function() return 711 end }
+    local ab = { GetAddress = function() error("record mode must return before queuing") end }
+    local okRecord, queued = pcall(_G.__QUEUE_TIMELINE, ab, "GA_BombMan_Skill_01_C", actor, pawn, "test")
+    eq(okRecord, true, "record mode never enters the actionable queue path")
+    eq(queued, nil, "record mode leaves a missing timeline missing")
+    S.seedFallback = "on"
+    local onRows, onAdded = T.seedRows("GA_BombMan_Skill_01_C", "BP_Monster_BombManRespawn_C", 300, {})
+    eq(onAdded, 2); eq(#onRows, 2, "on adopts both actor-qualified rows")
+    eq(onRows[1].seed, true); eq(onRows[1].source, "seed"); eq(onRows[1][3], true, "seed rows are dodge-only")
+    local replayRows, replayAdded = T.seedRows(
+        "GA_BombMan_Skill_01_C", "BP_Monster_BombManRespawn_C", 300, onRows)
+    eq(replayAdded, 0, "on merge is idempotent"); eq(#replayRows, 2)
+    S.seedFallback = "off"
+    local offRows, offAdded, offCandidates = T.seedRows(
+        "GA_BombMan_Skill_01_C", "BP_Monster_BombManRespawn_C", 300, {})
+    eq(#offRows, 0); eq(offAdded, 0); eq(#offCandidates, 0, "off disables the overlay")
+    S.seedFallback = oldMode
+end
 
 -- B (SDK 0.3.3): the game's own "is the deflect input held" answer replaces the key
 -- inference where it exists, and the key answer stands where it does not. Both
@@ -518,6 +553,6 @@ eq(#gaps, 0, "the whole test surface is present: " .. table.concat(gaps, ","))
 
 if T.ledFlush then T.ledFlush() end
 local led = read("auto_defense_ledger.txt")
-assert(led:find("v1.6.5", 1, true), "the ledger states the running version: " .. led:sub(1, 200))
+assert(led:find("v1.6.6", 1, true), "the ledger states the running version: " .. led:sub(1, 200))
 n = n + 1
 print("INTEGRATION PASS " .. n .. " assertions")

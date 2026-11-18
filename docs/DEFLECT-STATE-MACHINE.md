@@ -130,6 +130,8 @@ dodge(input, kind, handle, now) 尝试以下路径：
 
 时间轴观察器可创建 timedDodge（名称 + 目标时间 at）。tickTimedDodge 每帧检查是否到期，到期后清空 pending 项，再检查 dodge mode 并调用 dodge。它与当前 ReceiveFrame 的即时 dodge 分支是两个入口；时间轴分支不应被误解为由 GetNearestValidReceivedFrame 的窗口自动产生。
 
+当 `seed_fallback=on` 且现有时间轴缺行时，`ad_seed` 可按敌人类 + Ability + 距离精确合并只闪避的参考行。合并是单次激活的复制，不修改全局 hitTimes；已有快照或玩家学习行在 ±0.15 秒内会压过参考行。若真实 ReceiveFrame 在到期附近出现，pairTimeline 先把参考行标记为已配对、不按键；每个参考行仍由 q.tapped 保证一次性。`record` 只记录同样的候选，不创建 timed dodge。
+
 ## 6. Parry branch / 弹反分支
 
 tickParry 在 dodge / timed dodge 阶段之后运行。它按如下顺序判断：
@@ -205,6 +207,7 @@ PBZPerfectDefense ownership 对 perfect tag 与 guard press 有独立限制；�
 | guard_release / guard_release_after / guard_release_combat_end | guard 释放条件 |
 | pbzpd | 与 PBZPerfectDefense 的 guard ownership 协作策略 |
 | data / data_tags | 是否启用 bundled game data 与招式标签过滤 |
+| seed_fallback | `off` 禁用；`record` 只报告严格匹配；`on` 启用只闪避的缺帧参考行（依赖 data） |
 | dodge_attacks | 实验性名称/标签匹配，指定攻击走 dodge 而非 parry |
 
 字段范围、默认值和迁移规则见 [Configuration Reference](CONFIGURATION-REFERENCE.md)。
@@ -212,7 +215,7 @@ PBZPerfectDefense ownership 对 perfect tag 与 guard press 有独立限制；�
 ## 11. Verification and limitations / 验证要求与限制
 
 - tools/test_integration.lua 可通过 fake deflect/input 驱动 tl.decide 的关键分支，但这是离线 UE4SS stub，不等于真实游戏战斗。
-- tools/test_policy.lua 验证 intent allow/deny 规则；tools/test_timeline.lua 验证时间轴表和计数所有权；tools/test_menu_config.lua 验证配置约束。
+- tools/test_policy.lua 验证 intent allow/deny 规则；tools/test_timeline.lua 验证时间轴表和计数所有权；tools/test_seed.lua 验证敌人/招式/距离匹配、去重和数据来源；tools/test_menu_config.lua 验证配置约束。
 - 实机验收必须覆盖红/蓝/普通命中、黑闪、抓取、多段连击、闪避覆盖、连续闪避 cooldown、PD AutoGuard、Pawn 切换、对话/过场和无 ReceiveFrame 的 fallback。
 - 在修改顺序、提前量、dedupe 或 guard release 前，先记录相同场景的 decision ledger 与 perf_log；不要只凭平均时间判断稳定性。
 - 与 PBZPerfectDefense 的让位是**共约**（cooperative hand-off）：读它的配置与启用状态后主动退让，**不是跨进程互斥**。两套运行时各自持有本地状态，没有握手也没有仲裁者；对方在我们判定之后才改动 guard 时，同一帧仍可能出现双方动作。`pbzpd=yield` 只保证「不去争抢一个它声明要守的 guard」，不保证无竞态。

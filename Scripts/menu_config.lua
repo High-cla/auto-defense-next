@@ -35,6 +35,7 @@ M.schema = {
     { key = "flurry_guard", field = "flurryGuard", kind = "toggle", default = true, limits = nil, restart = true, scale = 1 },
     { key = "pbzpd", field = "pbzpd", kind = "choice", default = "auto", limits = {"auto", "yield", "off"}, restart = true, scale = 1 },
     { key = "data", field = "data", kind = "toggle", default = true, limits = nil, restart = true, scale = 1 },
+    { key = "seed_fallback", field = "seedFallback", kind = "choice", default = "record", limits = {"off", "record", "on"}, restart = false, scale = 1 },
     { key = "data_tags", field = "dataTags", kind = "toggle", default = false, limits = nil, restart = true, scale = 1 },
     { key = "dodge_attacks", field = "dodgeAttacks", kind = "readonly", default = "", limits = nil, restart = true, scale = 1 },
     { key = "data_off", field = "dataOff", kind = "readonly", default = "", limits = nil, restart = true, scale = 1 },

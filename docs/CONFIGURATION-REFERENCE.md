@@ -9,7 +9,7 @@
 
 | 文件 | 职责 |
 |---|---|
-| Scripts/menu_config.lua | 41 个字段的 schema、运行时类型与范围校验、单位转换、重启项隔离、热键读改写 |
+| Scripts/menu_config.lua | 42 个字段的 schema、运行时类型与范围校验、单位转换、重启项隔离、热键读改写 |
 | pbz-auto-defense.modsmenu.json | 原生菜单 UI 元数据：中英标签、帮助文本、默认值、选项、数值范围和 restart 标记 |
 | Scripts/main.lua | 运行时设置初值、旧 TXT 读取、配置加载顺序，以及热应用时需重置的内部状态 |
 | Scripts/ad_json.lua | 只接受扁平 JSON object；负责编码、解码和输入大小限制 |
@@ -78,6 +78,7 @@
 | Key | 菜单标签（中文 / English） | 类型 / 默认值 | 约束 / 选项 | 生效 / Apply | 注释 / Description |
 |---|---|---|---|---|---|
 | data | 加载游戏招式数据 / data | boolean / true | true 或 false | Restart | 启用随模组分发的游戏招式数据快照；切换后重启以重新构造数据索引。 / Loads the bundled game-move data snapshot; restart to rebuild the data layer. |
+| seed_fallback | 缺帧参考种子 / seed_fallback | string choice / "record" | off、record、on | Live | 依赖 data=true。off 禁用；record 只记录敌人类 + Ability + 距离精确匹配而不产生动作；on 合并只闪避的参考时机。已有快照/玩家学习行优先，真实 ReceiveFrame 会配对并取消参考输入。 / Requires data=true. Off disables it; record reports exact actor/ability/distance matches without acting; on enables dodge-only reference seeds. Existing/learned rows and real ReceiveFrames keep priority. |
 | data_tags | 使用招式要求标签 / data_tags | boolean / false | true 或 false | Restart | 在使用招式数据时进一步应用招式要求/标签信息。 / Applies move requirement tags when the game-data layer is enabled. |
 | dodge_attacks | 实验闪避关键字 / dodge_attacks | string（菜单只读）/ "" | 最长 4096 字节；禁止 CR/LF；手动 JSON 编辑 | Restart | 逗号/空白分隔的敌方 Ability 名称或标签匹配词；实验性地把命中改走闪避而非弹反。 / Comma/space-separated enemy ability names or tags that experimentally route matching attacks to dodge instead of parry. |
 | data_off | 旧数据排除清单（当前无效果） / data_off | string（菜单只读）/ "" | 最长 4096 字节；禁止 CR/LF；手动 JSON 编辑 | Restart | 兼容保留字段，会被解析/保存，但当前运行时没有消费点，不会过滤数据。 / Preserved legacy field; parsed and persisted but currently not consumed by the defense runtime. |
@@ -177,7 +178,7 @@ menu_config.toggle 会先重新读取最新 JSON，只修改 perfect、parry 或
 
 1. main.lua 先读取 auto_defense.txt，把已识别的旧键解析进内存 settings；文件缺失时使用源码默认值。
 2. menu_config:load(true) 尝试读取 pbz-auto-defense.config.json。
-3. 仅当 JSON 文件不存在（Windows 文件不存在错误码 2）时，适配器才从当前内存设置构造 41 个新 schema 字段。
+3. 仅当 JSON 文件不存在（Windows 文件不存在错误码 2）时，适配器才从当前内存设置构造 42 个新 schema 字段。
 4. 新字段经过相同校验后，编码为扁平 JSON 并创建配置文件。
 5. 配置成功后，JSON 成为唯一权威来源；当菜单适配器已启用时，旧 saveSettings 不再写回 TXT。
 
@@ -219,4 +220,4 @@ menu_config.toggle 会先重新读取最新 JSON，只修改 perfect、parry 或
 
 ## 8. 当前 schema 快照 / Current schema snapshot
 
-当前配置 schema 为 **41 个字段**：**39 个可在原生菜单编辑**，dodge_attacks 与 data_off 两个自由文本字段菜单只读、需手动编辑 JSON。若代码和文档数字不一致，以 menu_config.lua 与 pbz-auto-defense.modsmenu.json 为准，并应修复本文及对应测试，而不是默默接受漂移。
+当前配置 schema 为 **42 个字段**：**40 个可在原生菜单编辑**，dodge_attacks 与 data_off 两个自由文本字段菜单只读、需手动编辑 JSON。若代码和文档数字不一致，以 menu_config.lua 与 pbz-auto-defense.modsmenu.json 为准，并应修复本文及对应测试，而不是默默接受漂移。

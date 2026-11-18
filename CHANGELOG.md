@@ -2,6 +2,15 @@
 
 Versions are the `tl.VERSION` value in `Scripts/main.lua`; the release tag is `v<version>`.
 
+## 1.6.6 — 2026-11-18
+
+### 缺帧冷启动保护与参考数据层
+
+- `data/ad_data.lua` 保留 PBZAssist build 26367565 的全部既有表，并新增独立、带来源的 `reference_noframe` 命名空间；根据 AutoPerfectDefense 1.1.4 的公开默认/学习文件，仅录入 BombMan 0.820/2.270 秒与 YanQianSui 3.441 秒三个高置信语义时机，映射为 5 条 actor-qualified Ability 行，不引入其代码或完整原始样本。
+- 新增纯 `Scripts/ad_seed.lua`：严格匹配敌人类 + Ability，应用来源距离与 margin，按 ±0.15 秒让已有快照/玩家学习行优先，复制后合并并拒绝坏数据；不持有攻击生命周期、不修改全局 hitTimes、不直接执行输入。
+- 新增热应用设置 `seed_fallback=off|record|on`，默认 `record`。record 只记录本可采用的精确候选而不动作；on 才把参考时机作为只闪避的一次性冷启动回退，真实 ReceiveFrame 在到期附近出现时由既有 pairTimeline 优先配对并取消参考输入。
+- 原生菜单、旧 TXT 导入/回滚、配置参考、架构/状态机文档与离线门禁已同步；新增种子单元测试，并在集成测试中钉住 record 不动作、on 幂等合并和 off 无操作。
+
 ## 1.6.5 — 2026-11-18
 
 基于 UE4SS、PBZModLoader 和 PBZ USMAP 上游文档进行 API 核对与运行时优化（详见 [UPSTREAM-API-GUIDE.md](docs/UPSTREAM-API-GUIDE.md)）。

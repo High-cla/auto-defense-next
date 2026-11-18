@@ -8,6 +8,22 @@ local KEEP = {
     "endu", "endure", "parent", "montage", "ts0", "mspd", "dreach", "hit_aim", "precise_defense",
     "hit_timeline", "laser_emitters", "laser_montage_timeline", "stun", "names", "boss",
 }
+-- Minimal, provenance-bearing no-frame facts derived from the local reference mod.
+-- They are an additive namespace; they never change the PBZAssist build snapshot.
+local REFERENCE_NOFRAME = {
+    source = "AutoPerfectDefense 1.1.4", cluster_gap = 0.15, distance_margin = 150, rows = {
+        { id = "apd114-bombman-0820", actor = "BP_Monster_BombManRespawn_C", ability = "GA_BombMan_Skill_01_C",
+            montage = "BombMan_Skill_06_Montage", frame = 0.820, duration = 0.05, distance = 360, cancel = false },
+        { id = "apd114-bombman-nolock-0820", actor = "BP_Monster_BombManRespawn_C", ability = "GA_BombMan_Skill_01_NoLock_C",
+            montage = "BombMan_Skill_06_Montage", frame = 0.820, duration = 0.05, distance = 360, cancel = false },
+        { id = "apd114-bombman-2270", actor = "BP_Monster_BombManRespawn_C", ability = "GA_BombMan_Skill_01_C",
+            montage = "BombMan_Skill_06_Montage", frame = 2.270, duration = 0.05, distance = 360, cancel = false },
+        { id = "apd114-bombman-nolock-2270", actor = "BP_Monster_BombManRespawn_C", ability = "GA_BombMan_Skill_01_NoLock_C",
+            montage = "BombMan_Skill_06_Montage", frame = 2.270, duration = 0.05, distance = 360, cancel = false },
+        { id = "apd114-yanqiansui-3441", actor = "BP_Monster_YanQianSui_C", ability = "GA_YanQianSui_Skill_05_C",
+            montage = "YanQianSui_SpecialAttack_06_BanBen2_Montage", frame = 3.441, duration = 0.05, distance = 240, cancel = false },
+    },
+}
 local function ser(v)
     local t = type(v)
     if t == "number" then
@@ -39,6 +55,9 @@ for _, k in ipairs(KEEP) do
         sizes[k] = #s
     end
 end
+local ref = ser(REFERENCE_NOFRAME)
+parts[#parts + 1] = string.format("[%q]=%s", "reference_noframe", ref)
+counts.reference_noframe, sizes.reference_noframe = #REFERENCE_NOFRAME.rows, #ref
 -- 额外：special_hazards 的爆炸半径、mechanics 的武器限制
 local okh, hz = pcall(dofile, SRC .. "/special_hazards.lua")
 if okh and type(hz) == "table" and type(hz.zones) == "table" then
@@ -48,7 +67,8 @@ if okh and type(hz) == "table" and type(hz.zones) == "table" then
     parts[#parts + 1] = string.format("[%q]=%s", "zone_r", s)
     counts.zone_r, sizes.zone_r = (function() local n = 0 for _ in pairs(z) do n = n + 1 end return n end)(), #s
 end
-local body = "-- 自动生成，别手改。来源: PBZAssist/Scripts/enemy_data.lua，生成器 tools/make_ad_data.lua\n"
+local body = "-- 自动生成，别手改。主体来源: PBZAssist/Scripts/enemy_data.lua，生成器 tools/make_ad_data.lua\n"
+    .. "-- reference_noframe 是独立参考层，来源写在其 source 字段，不属于 PBZAssist 快照。\n"
     .. "-- 只读快照：缺键 = 不知道，调用方必须保留非数据退路。\nreturn {" .. table.concat(parts, ",\n") .. "}\n"
 io.write("OUT " .. OUT .. "\n")
 local f = assert(io.open(OUT .. "/ad_data.lua", "wb"))
