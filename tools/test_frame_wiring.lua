@@ -6,6 +6,10 @@ local src = assert(io.open("Scripts/main.lua", "rb")):read("*a")
 local menuSrc = assert(io.open("Scripts/menu_config.lua", "rb")):read("*a")
 local F = dofile("Scripts/ad_frames.lua")
 local n = 0
+local function hasnt(needle, why)
+    assert(not src:find(needle, 1, true), why)
+    n = n + 1
+end
 local function has(needle, why)
     assert(src:find(needle, 1, true), why)
     n = n + 1
@@ -40,4 +44,5 @@ t = 101.0
 assert(m:nearest(false, 0.3) == nil, "a second later it is stale")
 n = n + 4
 
+hasnt("local RELEASE_FROM_OUTSIDE = false", "the dormant guard-release path stays deleted")
 print("FRAME_WIRING PASS " .. n .. " assertions")

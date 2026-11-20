@@ -3203,13 +3203,7 @@ local function queueTimeline(ab, name, actor, pawn, via)
     return string.format("  << timeline guard at %s (%.0f cm, %s)", table.concat(at, " "), dist, via)
 end
 
--- ---------------------------------------------------------------- held guard
--- A deflect started by the mod never sees its key released, so the deflect
--- ability (tag Ability.Action.Stance) stays active as a held guard, which stops
--- Sát Khí from recovering. RELEASE_AFTER seconds after a tap by the mod, if the
--- player still has the Stance tag, the player's stance ability is ended. A guard
--- the player holds later (more than RELEASE_UNTIL after the tap) is left alone.
-local RELEASE_AFTER, RELEASE_UNTIL = 0.3, 3.0
+-- The guard is released by the deflect release watcher below, not by the tap.
 local stanceCache, stancePawn = nil, nil
 local releasedLogged = 0
 
@@ -3376,18 +3370,13 @@ local function checkRelease(pawn)
 end
 tl.checkRelease = checkRelease -- test seam: exposed as __CHECK_RELEASE under the marker
 
-local RELEASE_FROM_OUTSIDE = false -- never set: releaseHeldGuard's own release path is dormant (audit P2-1)
-local function releaseHeldGuard(pawn, deflect)
+-- The mod used to release its own guard here (RELEASE_FROM_OUTSIDE, never
+-- enabled). The deflect release watcher below owns that decision now; what
+-- matters here is the one side effect it always kept: lastTap is cleared every
+-- tick, which the sprint check in that watcher relies on.
+local function releaseHeldGuard(pawn, _deflect)
     checkRelease(pawn)
-    if not RELEASE_FROM_OUTSIDE then lastTap = nil return end
-    if not lastTap then return end
-    local since = os.clock() - lastTap
-    if since < RELEASE_AFTER then return end
-    if since > RELEASE_UNTIL then lastTap = nil return end
-    -- another hit of the combo coming: keep the stance (the next tap needs it)
-    if nearest(deflect, false, 0.6) >= 0 or nearest(deflect, true, 0.6) >= 0 then return end
     lastTap = nil
-    releaseStance(pawn, "after mod tap")
 end
 
 -- ---------------------------------------------------------------- guard release
