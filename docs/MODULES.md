@@ -1,4 +1,4 @@
-# Module layout (1.6.7)
+# Module layout (1.6.8)
 
 Decision and execution order is unchanged. What moved is **where each concern lives**
 and **which door every side effect goes through**. Behaviour changes are listed in the
@@ -6,7 +6,7 @@ CHANGELOG, not here.
 
 | File | Lines | Owns |
 | --- | ---: | --- |
-| `Scripts/main.lua` | 5686 | hooks, tick orchestration, the decision chain (`tl.decide`), parry/dodge mechanics, ledger, perf, data loader |
+| `Scripts/main.lua` | 5687 | hooks, tick orchestration, the decision chain (`tl.decide`), parry/dodge mechanics, ledger, perf, data loader |
 | `Scripts/ad_query.lua` | 176 | read-only game queries: `valid/name/unwrap/num/prop/baseName/obj/tag/tagLibrary/component/ascOf/nowOf` (log injected); `tag` memoised, `baseName` is the one name rule |
 | `Scripts/ad_compat.lua` | 61 | the runtime compat layer: `gc(mode)` / `atan(y, x)` / `version()` / `hasJit()` — the two Lua-5.4-only calls live here and nowhere else |
 | `Scripts/ad_timeline.lua` | 60 | the learned timeline table **and** its count (`table/count/put/add/addRow/removeRow/get/recount/each`) |
@@ -59,9 +59,9 @@ Installation is `pcall`-guarded: a failure leaves the plain functions in place, 
 - **Error channel**: every action call site goes through `tl.try(what, fn, ...)`; a failure is
   logged the first 3 times per `what` (traceback on the first) and emitted as `error` on the
   bus. Read probes keep plain `pcall` on purpose — they are "try to read, fall back", not actions.
-- **Hot path**: named `RT.*` accessors instead of `pcall(function() ... end)`, one reusable
-  `RT.out` frame table, constant kind tables in `RT`, one name rule (`RT.bname` →
-  `Q.baseName`). Nothing in the per-tick path allocates a closure.
+- **Hot path**: named `RT.*` accessors instead of `pcall(function() ... end)`, constant kind
+  tables in `RT`, one name rule (`RT.bname` → `Q.baseName`). Nothing in the per-tick path
+  allocates a closure.
 - **Hooks**: UE4SS returns **two** ids per hook (pre and post) and has exactly one removal form,
   `UnregisterHook(path, preId, postId)`, which returns nothing. `RT.rememberHook(key, path, pre,
   post)` stores all three in `tl.hookIds`; `RT.unhook(key)` calls the 3-arg form through pcall,

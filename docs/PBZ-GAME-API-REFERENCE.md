@@ -126,12 +126,11 @@ local handle = deflect:GetNearestValidReceivedFrame(
     360.0,  -- DeflectAngle
     window, -- MaxPreimpactTime
     isDodge,
-    -1,     -- CurrentHandle
-    {}      -- UE4SS Lua 结构体参数候选
+    -1      -- CurrentHandle
 )
 ~~~
 
-当前 Lua 路径依赖返回的 handle 和查询窗口，不依赖 OutFrame table 的写回字段。SDK 的 $Ref<DeflectReceiveFrame> 是 PuerTS 参数引用，不等同于 UE4SS Lua 的普通 table。
+当前 Lua 路径只依赖返回的 handle（`>= 0` 即有效）与查询窗口，第 5 个实参 OutFrame 不传：SDK 的 $Ref<DeflectReceiveFrame> 是 PuerTS 参数引用，UE4SS Lua 里读不回来。
 
 **OutFrame 风险：** 在确认 Lua binding 每次调用都会完整覆盖输出字段、失败时的清空语义、table 转换成本之前，不应复用同一表，也不应把上次结果当作本次结果。减少分配必须通过受控 A/B 测试证明，不可臆测。
 

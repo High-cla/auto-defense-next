@@ -7,7 +7,7 @@
 
 每个有效游戏 tick 执行一次决策入口 tl.decide(pawn, deflect, input, gameTime)。它读取：
 
-- Deflect Component 的最近有效 ReceiveFrame：GetNearestValidReceivedFrame(360.0, window, isDodge, -1, RT.out)。
+- Deflect Component 的最近有效 ReceiveFrame：GetNearestValidReceivedFrame(360.0, window, isDodge, -1)。末尾的 OutFrame 出参不传（句柄只用于 `>= 0` 比较，该结构经 UE4SS 读不回来），计时由查询自身的 MaxPreimpactTime 负责。
 - 可选的逐帧 ReceiveFrames 时间和类型：由 read_frames / fxScan 路径更新。
 - 已跟踪的敌方 Ability、Montage、命中时间轴与数据快照。
 - 玩家当前 Pawn、能力输入组件、无敌窗/动作锁、guard stance、PBZPerfectDefense ownership。

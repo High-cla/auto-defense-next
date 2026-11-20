@@ -2,6 +2,12 @@
 
 Versions are the `tl.VERSION` value in `Scripts/main.lua`; the release tag is `v<version>`.
 
+## 1.6.8 — 2026-11-20
+
+### 最近受击帧查询不再传 OutFrame
+
+`nearest()` 改成 `GetNearestValidReceivedFrame(360.0, window, isDodge, -1)`：返回的 handle 只与 `>= 0` 比较，OutFrame 出参经 UE4SS 读不回来，传它没有作用。随之删掉只为它存在的 `RT.out` 表；`tools/test_api_contract.lua` 的契约改成四实参，并新增「不得再传 OutFrame」断言；`docs/PBZ-GAME-API-REFERENCE.md`、`docs/DEFLECT-STATE-MACHINE.md`、`docs/MODULES.md`、`docs/API-OPTIMIZATION-ROADMAP.md` 同步。
+
 ## 1.6.7 — 2026-11-18
 
 ### 别离残钩反制与蓝色护盾反制

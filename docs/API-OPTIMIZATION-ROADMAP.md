@@ -152,7 +152,7 @@ PBZ AbilityInputComponent 声明了 Try/Force API。Try API 可作为实验候�
 
 | API/做法 | 暂不实现原因 |
 |---|---|
-| 复用 GetNearestValidReceivedFrame 的同一个 OutFrame table | 未确认函数是否累积数据、失败是否清空、UE4SS 是否完整覆盖 table |
+| 传入 GetNearestValidReceivedFrame 的 OutFrame table | 已不传：句柄只用于 `>= 0` 比较，OutFrame 经 UE4SS 读不回来，计时由查询自身的 MaxPreimpactTime 负责 |
 | ForceActivateExternalActionAbilityByTag | 强制语义可能绕过输入优先级/动作锁或别的 MOD 所有权 |
 | FlushPlayerInput | 影响范围可能包括玩家和其他 MOD 输入，不能作为单次失败的恢复按钮 |
 | StartContinuousInputInjectionForAction | 持续输入需要可靠停止及生命周期管理，反射声明没有给出已验证的端到端方案 |
