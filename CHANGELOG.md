@@ -2,6 +2,18 @@
 
 Versions are the `tl.VERSION` value in `Scripts/main.lua`; the release tag is `v<version>`.
 
+## 1.6.12 — 2026-11-21
+
+### 修复：闪避按键从未真正送出（P0）
+
+- `Scripts/main.lua` 的 `ad_input.attach` 漏了 `inject` 绑定，于是 `tl.input.inject(intent, action)` 在规则放行后仍然直接 `return false`。1.6.11 实机会话（41 分钟、127,926 ticks）里 301 次按键尝试只有 1 次成功：闪避键与 `IA_DodgeHold` 全部没送出，只有「直接激活能力」那条在跑，而它对多数招式返回 false。修复后 `inject = injectKey` 已绑定。
+- 新增 `tools/test_input.lua`（23 断言）：绑定后放行、未绑定时返回 false（正是这次的故障形态）、拒绝时发事件且不调用机制、守卫按键/释放/收势各自的 intent、未知 intent 拒绝。
+
+### 取证：三角动作名与出手时间读法
+
+- `tl.COUNTER_ACTIONS` 从 4 个候选扩到 10 个；全部落空时调用 `tl.listInputActions()`，用 `FindAllOf("InputAction")` 把游戏里真实存在的输入动作写进日志（该会话证明 `IA_AttackH_*` 一个都不存在，反制因此从未武装）。
+- `prehitOf` 改为点号读取（`act.PreHitPointDuration`）：整局 132 次钩子里字符串下标读法全部返回 nil（`frames: hook=132 notime=132 added=0`）；另加一行一次性探针，把点号/下标/`FName` 三种读法并列打出。
+- `shield_counter=on` 但 `shield_counter_range` 小于 50 cm 时打一行警告（该配置是 0 cm，蓝盾反制永远不可能触发）。
 ## 1.6.11 — 2026-11-21
 
 ### 反制触发条件放宽（删掉两个从未命中的判定）
