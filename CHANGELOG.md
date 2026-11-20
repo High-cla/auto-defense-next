@@ -2,7 +2,7 @@
 
 Versions are the `tl.VERSION` value in `Scripts/main.lua`; the release tag is `v<version>`.
 
-## Unreleased
+## 1.6.11 — 2026-11-21
 
 ### 反制触发条件放宽（删掉两个从未命中的判定）
 
