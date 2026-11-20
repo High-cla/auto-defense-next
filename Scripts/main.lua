@@ -4960,10 +4960,13 @@ local function onSendFrame(ctx, action, _bullet, _rotation, _, _, strength, dire
     enemyScanWanted = true
     -- 1.6.10: the mod's own record of the frame (see nearest): the hook says when
     -- it was created, the ability says how long until its hit point
+    tl.hookSeen = (tl.hookSeen or 0) + 1
     if settings.readFrames and settings.frameSource ~= "game" and FRAMES then
         local pre = prehitOf(act)
+        if not pre then tl.hookNoTime = (tl.hookNoTime or 0) + 1 end
         if pre then
             local id = FRAMES:add({ at = os.clock(), prehit = pre, isDodge = okD and red == true, src = actName })
+            if id then tl.frameAdded = (tl.frameAdded or 0) + 1 end
             local gnow = id and currentPawn and nowOf(currentPawn) or nil
             if id and gnow and gnow > 0 and tl.fxAdd then
                 local okB, blt = pcall(function() return unwrap(_bullet) end)
@@ -5357,6 +5360,8 @@ tl.main = function(id)
             if tl.bus and tl.bus.stats then drop = tl.bus.stats().dropped or 0 end
             local asks, known = 0, 0
             if tl.inputState then asks, known = tl.inputState.stats() end
+            tl.led("frames: hook=%d notime=%d added=%d live=%d", tl.hookSeen or 0, tl.hookNoTime or 0,
+                tl.frameAdded or 0, tl.frames and tl.frames:count() or 0)
             tl.led("metrics: drop=%d asked=%d denied=%d lua=%.0fKB hold=%d/%d", drop, asked, denied,
                 collectgarbage("count"), known, asks)
         end

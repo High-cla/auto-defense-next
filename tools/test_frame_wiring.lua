@@ -44,5 +44,7 @@ t = 101.0
 assert(m:nearest(false, 0.3) == nil, "a second later it is stale")
 n = n + 4
 
+has("tl.hookSeen = (tl.hookSeen or 0) + 1", "the hook counts every enemy frame it sees")
+has('frames: hook=%d notime=%d added=%d live=%d', "the ledger reports what the hook produced")
 hasnt("local RELEASE_FROM_OUTSIDE = false", "the dormant guard-release path stays deleted")
 print("FRAME_WIRING PASS " .. n .. " assertions")
