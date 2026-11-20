@@ -3146,6 +3146,7 @@ local function queueTimeline(ab, name, actor, pawn, via)
             tl.led("timeline %s: %.0f cm away, outside the %.0f cm blast - those hits left alone", base, dist, radius)
         end
     end
+    if #tlQueue >= tl.TL_QUEUE_CAP and tl.reapQueue then tl.reapQueue() end
     tlQueue[#tlQueue + 1] = { actor = actor, name = base, t0 = os.clock(), hits = hits, m0 = st and st.name,
         flurry = flurry, far = far, nsAt = nsAt, radius = radius, life = math.max(15, last * 1.5 + 2) }
     local at = {}
@@ -3903,6 +3904,25 @@ do
         end
     end
 
+    -- 1.6.9: the queue maintains itself. Cleanup used to be a side effect of the
+    -- decision loop below, and that loop is gated by `parry`; switching parry off
+    -- (a live setting) therefore kept every queued attack for the whole session.
+    -- The cap is a hard bound: the oldest attack without a pending hit goes first,
+    -- a live one is never dropped.
+    tl.TL_QUEUE_CAP = 32
+    tl.reapQueue = function()
+        local t = os.clock()
+        for i = #tlQueue, 1, -1 do
+            local q = tlQueue[i]
+            if q.done or t - q.t0 > q.life then table.remove(tlQueue, i) end
+        end
+        local i = 1
+        while #tlQueue > tl.TL_QUEUE_CAP and i <= #tlQueue do
+            if tlQueue[i].pendingHit ~= true then table.remove(tlQueue, i) else i = i + 1 end
+        end
+        if #tlQueue == 0 then tl.info = "" end
+    end
+
     tickTimelineGuard = function(pawn, deflect)
         local now = os.clock()
         tickArea(pawn, now)
@@ -4084,6 +4104,7 @@ do
                     end
                 end
             end
+            q.pendingHit = pending -- the reaper reads this outside the loop
             if i == #tlQueue then tl.info = string.format("%s@%.2f", q.name, t) end
             if done or not pending or now - q.t0 > q.life then
                 table.remove(tlQueue, i)
@@ -5321,6 +5342,8 @@ tl.decide = function(p, deflect, input, now)
     if DEBUG then guarded("stance", watchStance, p, deflect) end
     if LEARN then guarded("manual dodge", watchManualDodge) end
     guarded("sat khi", tickShachi, p)
+    -- 1.6.9: the queue is maintained even while the timeline stage is off
+    if tl.reapQueue then tl.reapQueue() end
     guarded("guard release", tickGuardRelease, p, deflect)
     -- red first: a dodge must not be swallowed by a parry attempt
     guarded("dodge", tickDodge, deflect, input, now)
@@ -5680,6 +5703,13 @@ end
     -- audit P0-3: the decision chain had no offline coverage at all
     _G.__DECIDE, _G.__CHECK_RELEASE = tl.decide, tl.checkRelease
     _G.__QUEUE_TIMELINE, _G.__TEARDOWN = queueTimeline, tl.teardown
+    -- 1.6.9: the queue bound is only reachable through a synthetic row
+    _G.__QUEUE_TEST = {
+        push = function(row) tlQueue[#tlQueue + 1] = row end,
+        clear = function() for i = #tlQueue, 1, -1 do tlQueue[i] = nil end end,
+        len = function() return #tlQueue end,
+        reap = function() return tl.reapQueue() end,
+    }
     _G.__RUNTIME = {
         version = _VERSION, jit = rawget(_G, "jit") and rawget(_G, "jit").version or nil,
         compat = RT.compat ~= nil,

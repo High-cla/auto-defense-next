@@ -33,6 +33,18 @@ eq(bb.stats().failures, 1)
 bb.emit("x"); bb.drain(8); eq(good, 2, "bus survives")
 eq(bb.stats().failures, 1, "no repeated failure")
 
+-- 1.6.9: one subscriber that throws on every event must not take the others with it
+local bd = A.events(8)
+local s1, s2 = 0, 0
+bd.subscribe(function() error("boom") end)
+bd.subscribe(function() s1 = s1 + 1 end)
+bd.subscribe(function() s2 = s2 + 1 end)
+bd.emit("x"); bd.emit("x"); bd.drain(8)
+eq(bd.stats().subs, 2, "two healthy subscribers survive one broken one")
+eq(s1, 2, "the first healthy subscriber keeps its deliveries")
+eq(s2, 2, "the second healthy subscriber keeps its deliveries")
+bd.emit("x"); bd.drain(8); eq(s1, 3, "delivery keeps working afterwards")
+
 -- drain budget stops early and leaves the rest queued
 local bc = A.events(16)
 for i = 1, 10 do bc.emit("k" .. i) end

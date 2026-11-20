@@ -44,16 +44,21 @@ function M.events(cap)
                 local fn = subs[i]
                 if fn then
                     local ok = pcall(fn, s)
-                    if not ok then failures = failures + 1 broken = broken or {} broken[#broken + 1] = i end
+                    if not ok then failures = failures + 1 broken = broken or {} broken[i] = true end
                 end
             end
             -- cleared on delivery: a consumer that keeps the table gets nil
             -- instead of the next event's fields
             s.kind, s.a, s.b, s.c = nil, nil, nil, nil
         end
-        -- a subscriber that threw is dropped, so it cannot repeat the cost every tick
+        -- a subscriber that threw is dropped, so it cannot repeat the cost every tick.
+        -- 1.6.9: the broken set is keyed by index, not appended per failure - one
+        -- subscriber that threw on two events was queued twice and the reverse
+        -- removal then deleted a healthy neighbour as well.
         if broken then
-            for i = #broken, 1, -1 do table.remove(subs, broken[i]) end
+            local keep = {}
+            for i = 1, #subs do if not broken[i] then keep[#keep + 1] = subs[i] end end
+            subs = keep
         end
         delivered = delivered + n
         return n

@@ -6,15 +6,31 @@
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 fail=0
+# A suite that quietly stops asserting is worse than a red one: the last number on
+# its verdict line must not fall below the floor in tools/assertions.min. Raise a
+# floor when a suite gains assertions, never lower it to make a run green.
+check_assertions() {
+    local key=$1 text=$2 floor got
+    [ -f tools/assertions.min ] || return 0
+    floor=$(awk -v k="$key" '$1 == k { print $2 }' tools/assertions.min)
+    [ -n "$floor" ] || return 0
+    got=$(printf '%s' "$text" | tail -1 | grep -oE '[0-9]+' | tail -1)
+    if ! [[ ${got:-x} =~ ^[0-9]+$ ]] || [ "$got" -lt "$floor" ]; then
+        printf '%-24s FAIL (assertions %s below the baseline %s)\n' "$key" "${got:-?}" "$floor"
+        fail=1
+    fi
+}
 for t in test_policy test_async test_timeline test_query test_menu_config test_menu_bridge test_seed test_weapon test_counter test_compat test_toast test_api_contract test_inputstate; do
     if out=$(luajit "tools/$t.lua" 2>&1); then
         printf '%-24s %s\n' "$t" "$(printf '%s' "$out" | tail -1)"
+        check_assertions "$t" "$out"
     else
         printf '%-24s FAIL\n' "$t"; printf '%s\n' "$out" | tail -12; fail=1
     fi
 done
 if out=$(bash tools/run_integration.sh 2>&1); then
     printf '%-24s %s\n' test_integration "$(printf '%s' "$out" | grep 'INTEGRATION PASS' | tail -1)"
+    check_assertions test_integration "$(printf '%s' "$out" | grep 'INTEGRATION PASS' | tail -1)"
 else
     printf '%-24s FAIL\n' test_integration; printf '%s\n' "$out" | tail -15; fail=1
 fi

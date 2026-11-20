@@ -220,6 +220,7 @@ if type(RT) ~= "table" then gaps[#gaps + 1] = "__RUNTIME" end
 if type(_G.__DECIDE) ~= "function" then gaps[#gaps + 1] = "__DECIDE" end
 if type(_G.__CHECK_RELEASE) ~= "function" then gaps[#gaps + 1] = "__CHECK_RELEASE" end
 if type(_G.__QUEUE_TIMELINE) ~= "function" then gaps[#gaps + 1] = "__QUEUE_TIMELINE" end
+if type(_G.__QUEUE_TEST) ~= "table" then gaps[#gaps + 1] = "__QUEUE_TEST" end
 if type(T.ledOnce) ~= "function" then gaps[#gaps + 1] = "tl.ledOnce" end
 
 -- B (P0-2): the runtime row states what the chunk runs on, so a 5.4-only call
@@ -267,6 +268,24 @@ do
         "GA_BombMan_Skill_01_C", "BP_Monster_BombManRespawn_C", 300, {})
     eq(#offRows, 0); eq(offAdded, 0); eq(#offCandidates, 0, "off disables the overlay")
     S.seedFallback = oldMode
+end
+
+-- 1.6.9: the queue is bounded even with parry off - its reaper used to be a side
+-- effect of a stage that `parry` gates
+do
+    local QT = _G.__QUEUE_TEST
+    eq(type(QT), "table", "the queue test seam is public")
+    if type(QT) == "table" then
+        QT.clear()
+        for _ = 1, 64 do QT.push({ t0 = os.clock(), life = 15 }) end
+        QT.reap()
+        eq(QT.len() <= 32, true, "an idle queue is capped")
+        QT.clear()
+        for _ = 1, 40 do QT.push({ t0 = os.clock(), life = 15, pendingHit = true }) end
+        QT.reap()
+        eq(QT.len(), 40, "a hit that is still pending is never dropped")
+        QT.clear()
+    end
 end
 
 -- B (SDK 0.3.3): the game's own "is the deflect input held" answer replaces the key
@@ -636,6 +655,29 @@ T.check(true)
 eq(T.stopped, false, "the mod is armed again after the second teardown")
 T.hookIds = nil
 RegisterHook, UnregisterHook = realReg, realUnreg
+
+-- 1.6.9: the reaper is wired into the per-frame decision chain itself, not into a
+-- stage that `parry` gates - the old cleanup only ran with parry on, so a
+-- parry-off session kept every queued attack. Driven through the real chain.
+do
+    local QT = _G.__QUEUE_TEST
+    if type(QT) == "table" and type(_G.__DECIDE) == "function" then
+        local qpawn = { IsValid = function() return true end, GetAddress = function() return 930 end,
+            GetActorForwardVector = function() return { X = 1, Y = 0, Z = 0 } end }
+        local qdeflect = { IsValid = function() return true end, GetAddress = function() return 931 end,
+            ReceiveFrames = { ForEach = function() end },
+            GetNearestValidReceivedFrame = function() return -1 end }
+        local qinput = { IsValid = function() return true end, GetAddress = function() return 932 end }
+        local oldParry = S.parry
+        S.parry = false
+        QT.clear()
+        for _ = 1, 64 do QT.push({ t0 = os.clock(), life = 15 }) end
+        _G.__DECIDE(qpawn, qdeflect, qinput, 100)
+        eq(QT.len() <= 32, true, "parry off: the decision chain still bounds the queue")
+        S.parry = oldParry
+        QT.clear()
+    end
+end
 
 eq(#gaps, 0, "the whole test surface is present: " .. table.concat(gaps, ","))
 

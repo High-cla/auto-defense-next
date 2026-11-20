@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    # The one workflow the repository had was dispatch-only, so nothing ran on a
+    # push and the pre-commit hook is a local, opt-in file. This job is the same
+    # command a developer runs, with the optional tools required instead of
+    # skipped: without them the gate would silently pass on a machine that has
+    # neither lua5.4 nor selene.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Lua
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq luajit lua5.4
+      - name: selene
+        run: |
+          curl --fail --location --silent --show-error --retry 3 \
+            -o /tmp/selene.zip https://github.com/Kampfkarren/selene/releases/download/0.32.0/selene-0.32.0-linux.zip
+          unzip -o -q /tmp/selene.zip -d /tmp/selene
+          sudo install /tmp/selene/selene /usr/local/bin/selene
+          selene --version
+      - name: Test fixtures
+        run: python tools/ci_prepare_test_fixtures.py
+      - name: Gate
+        env:
+          AD_REQUIRE_SELENE: "1"
+          AD_REQUIRE_LUA54: "1"
+        run: bash tools/run_all.sh

@@ -58,13 +58,18 @@ def main():
     out_dir = os.path.join(ROOT, "dist")
     os.makedirs(out_dir, exist_ok=True)
     out = os.path.join(out_dir, "pbz-auto-defense-v%s.zip" % ver)
-    missing, written = [], 0
+    entries = list(relpaths())
+    # 1.6.9: a file quietly left out of the archive used to exit 0, so a broken
+    # package could be uploaded. Refuse before anything is written.
+    missing = [rel for rel in entries
+               if not os.path.isfile(os.path.join(ROOT, rel.replace("/", os.sep)))]
+    if missing:
+        print("package: missing required files: " + ", ".join(missing), file=sys.stderr)
+        return 1
+    written = 0
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
-        for rel in relpaths():
+        for rel in entries:
             src = os.path.join(ROOT, rel.replace("/", os.sep))
-            if not os.path.isfile(src):
-                missing.append(rel)
-                continue
             info = zipfile.ZipInfo(FOLDER + "/" + rel, date_time=(1980, 1, 1, 0, 0, 0))
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = 0o644 << 16
@@ -79,8 +84,6 @@ def main():
         digest = hashlib.sha256(fh.read()).hexdigest()
     print("package: v%s -> %s" % (ver, os.path.relpath(out, ROOT)))
     print("package: %d files, %d bytes, sha256 %s" % (written, size, digest))
-    if missing:
-        print("package: missing (skipped): " + ", ".join(missing))
     return 0
 
 
