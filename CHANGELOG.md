@@ -2,6 +2,14 @@
 
 Versions are the `tl.VERSION` value in `Scripts/main.lua`; the release tag is `v<version>`.
 
+## Unreleased
+
+### 反制按键改走游戏自己的能力输入分发
+
+- 新增 `Scripts/ad_abiinput.lua`：`press(action)` 先调 `AbilityInputComponent:HandleInputAction(asc, action)`（真实按键走的那条路，同一帧可以先按架势再按三角），被拒绝、抛错或拿不到 ASC 时回落到原来的单帧向量注入；`landed()` 在按键后 0.05 s 用 `hasTag(asc, "Ability.Action.Stance")` 回读架势是否真的起手。
+- 连续 3 次失败自动整局回退到注入路径（`dead`/`why`，日志只记一次），因此即使某个构建上分发不工作，代价也只是一次反制尝试而不是整个功能。
+- `tl.api` 新增 `installAbiInput`（32 个名字）；`tools/test_abiinput.lua` 覆盖分派成功、拒绝、抛错、无 ASC、双路失败、回读与自回退。
+- 反制的时间窗口、`ad_counter.lua` 的判定与 `q.countered` 抑制链未改动。
 ## 1.6.10 — 2026-11-20
 
 ### 帧来源改由发送钩子回答（绕开会崩溃的引擎查询）

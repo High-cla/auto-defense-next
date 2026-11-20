@@ -241,7 +241,7 @@ if type(RT) == "table" then
     eq(RT.jit == nil or type(RT.jit) == "string", true, "runtime jit is a name or absent")
 end
 -- E (P1-5): the documented surface is pinned, not grown by accident
-eq(#T.api, 31, "the public surface stays at the 31 documented names")
+eq(#T.api, 32, "the public surface stays at the 32 documented names")
 eq(type(T.VERSION) == "string" and T.VERSION:match("^%d+%.%d+%.%d+$") ~= nil, true,
     "VERSION is semantic: " .. tostring(T.VERSION))
 

@@ -2360,16 +2360,36 @@ do
             if now >= hold.untilT then
                 tl.counterHold = nil
             else
-                if valid(hold.stance) then tl.try("counter stance", injectKey, hold.stance) end
+                local ABI = tl.abiInput
+                if valid(hold.stance) then
+                    if ABI then pcall(ABI.press, ABI, hold.stance)
+                    else tl.try("counter stance", injectKey, hold.stance) end
+                end
                 if not hold.pressed then
                     hold.pressed = true
-                    local okp, sent = pcall(injectKey, hold.action)
-                    if okp and sent then
+                    local how = "failed"
+                    if ABI then
+                        local okp, res = pcall(ABI.press, ABI, hold.action)
+                        if okp and res then how = res end
+                    else
+                        local okp, sent = pcall(injectKey, hold.action)
+                        if okp and sent then how = "injected" end
+                    end
+                    if how ~= "failed" then
                         -- the press went out: the stance has until confirmBy to show
                         if tl.counter then pcall(tl.counter.guardUp, tl.counter, now) end
+                        hold.checkAt = now + 0.05
                     else
-                        once("pressfail", "counter: the Triangle press could not be injected (%s)",
-                            okp and "no input subsystem" or tostring(sent))
+                        once("pressfail", "counter: the Triangle press did not reach the game (no input path answered)")
+                    end
+                end
+                if hold.checkAt and now >= hold.checkAt then
+                    hold.checkAt = nil
+                    -- read the stance back: a press that never started an ability is
+                    -- the counter failing, not the counter working
+                    if ABI then
+                        local okl, up = pcall(ABI.landed, ABI)
+                        if okl and up == true then tl.led("counter: the press started the stance") end
                     end
                 end
             end
@@ -4527,6 +4547,35 @@ local function watchStance(pawn, deflect)
 end
 
 tl.stanceUp = function(pawn) return hasTag(ascOf(pawn), "Ability.Action.Stance") end
+-- The counter presses through the game's own ability input dispatch first
+-- (SGameInputSystem.AbilityInputComponent:HandleInputAction, the round trip a real
+-- key takes) and keeps the vector injection as the fallback. The dispatcher reverts
+-- itself after three failures, so a build where the dispatch does not work costs one
+-- counter attempt, not the feature.
+tl.installAbiInput = function()
+    if tl.abiInput or tl.abiInputErr then return tl.abiInput end
+    local okI, res = pcall(function()
+        return dofile(MOD_DIR .. "Scripts/ad_abiinput.lua").new({
+            asc = function() return valid(currentPawn) and ascOf(currentPawn) or nil end,
+            stance = function(asc) return hasTag(asc, "Ability.Action.Stance") end,
+            activate = function(asc, action)
+                local comp = component(currentPawn, "Ability Input Component")
+                if not comp then return false, "no input component" end
+                return comp:HandleInputAction(asc, action)
+            end,
+            inject = function(action) return injectKey(action) end,
+            log = log,
+        })
+    end)
+    if okI and res then
+        tl.abiInput = res
+    else
+        tl.abiInputErr = tostring(res)
+        log("counter input unavailable: %s", tl.abiInputErr)
+    end
+    return tl.abiInput
+end
+tl.installAbiInput()
 endStance = function(pawn, why)
     if deflectKeyHeld() then return end
     local asc = ascOf(pawn)
@@ -5757,7 +5806,7 @@ do
         "tickReceipt", "fxScan", "fxDue", "fxClear", "pressTap", "releaseHeldKey",
         "menu", "input", "policy", "bus", "warm", "led", "ledFlush", "emit", "err", "logState",
         "dat", "seed", "seedRows", "pd", "guardOwned", "pruneHandles", "VERSION", "busIdx", "api", "log", "teardown",
-        "holdAsk", "installInputState", "installCounter", "counterTry",
+        "holdAsk", "installInputState", "installCounter", "installAbiInput", "counterTry",
     }
     local fields = 0
     for _ in pairs(tl) do fields = fields + 1 end

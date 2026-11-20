@@ -38,6 +38,7 @@ flowchart TD
     ASYNC["Scripts/ad_async.lua<br/>event ring + warm-up queue"] --> MAIN
     COMPAT["Scripts/ad_compat.lua<br/>Lua version adapters"] --> MAIN
     INPUTSTATE["Scripts/ad_inputstate.lua<br/>game hold answer, key fallback"] --> MAIN
+    ABIINPUT["Scripts/ad_abiinput.lua<br/>counter key: game dispatch, injection fallback"] --> MAIN
     WEAPON["Scripts/ad_weapon.lua<br/>read-only weapon / shachi / blue-shield readers"] --> MAIN
     COUNTER["Scripts/ad_counter.lua<br/>counter timing state machine"] --> MAIN
     TOAST["Scripts/toast.lua"] --> MAIN
@@ -55,6 +56,7 @@ flowchart TD
 | Scripts/ad_policy.lua | 纯规则判断：intent → allow/deny + reason；记录拒绝统计 | 直接调用游戏对象或执行输入 |
 | Scripts/ad_input.lua | guard press/release、stance end、tag、input injection 的统一门 | 自己重新实现防守算法；绕过 policy 直接操作游戏 |
 | Scripts/ad_inputstate.lua | 读游戏自己的 hold 状态（`IsHolding/GetHoldTime`）并按注入窗口裁定是否采信；失败一律返回 nil | 缓存过期状态、把本模组注入的按键当成玩家按住、从 hook 里写游戏状态 |
+| Scripts/ad_abiinput.lua | 把反制按键先送进游戏自己的能力输入组件（`HandleInputAction`），拒绝或抛错时回落到向量注入；用 `hasTag` 回读架势确认真的起手 | 在键没送到时假装成功、对同一次故障重复记日志、在失败后仍继续调用分发 |
 | Scripts/ad_seed.lua | 纯 reference_noframe 索引与复制后合并：敌人类 + Ability + 距离精确匹配，时间邻近去重 | 读取游戏对象、持有攻击生命周期、修改全局 hitTimes 或执行输入 |
 | Scripts/ad_weapon.lua | 只读游戏状态读取器：手里是不是别离残钩（武器名含 DualHook）、杀气多少、最近的蓝盾敌人在哪；读取函数由 main.lua 注入，结果按约 0.5 s 过期缓存，失败只计数一次原因 | 直接写游戏状态、执行输入、成为第二个 UObject 扫描点，或缓存过期读数 |
 | Scripts/ad_counter.lua | 反制时序状态机：offer / nextPress / guardUp / poll / pending / stats，按注入时钟在 0.22–0.35 s 窗口内给出「等 / 按 / 放弃」，一次只允许一个在途反制 | 直接写游戏状态、自己注入按键，或拥有攻击生命周期 |
@@ -178,7 +180,7 @@ ad_async 使用容量 512 的 ring buffer 收集只读事件，每 tick 最多 d
 - menu_config 的 raw 和 lastText 对应最近一份通过验证的 JSON；pending 对应本次运行需重启的字段。
 - ad_menu_bridge 只拥有自己的文件名镜像统计和轮询节流，不拥有配置语义。
 
-tl.api 是显式公开给其他模块/测试的表面（当前 31 个名称）；未列入 tl.api 的字段均为内部实现细节。测试全局只在带 .ad-menu-test-only 标记的隔离副本中导出，正常安装不暴露这些全局。
+tl.api 是显式公开给其他模块/测试的表面（当前 32 个名称）；未列入 tl.api 的字段均为内部实现细节。测试全局只在带 .ad-menu-test-only 标记的隔离副本中导出，正常安装不暴露这些全局。
 
 ## 7. Persistence map / 持久化映射
 

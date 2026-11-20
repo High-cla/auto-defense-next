@@ -46,5 +46,7 @@ n = n + 4
 
 has("tl.hookSeen = (tl.hookSeen or 0) + 1", "the hook counts every enemy frame it sees")
 has('frames: hook=%d notime=%d added=%d live=%d', "the ledger reports what the hook produced")
+has('dofile(MOD_DIR .. "Scripts/ad_abiinput.lua")', "the counter input dispatcher is installed")
+has("local ABI = tl.abiInput", "the counter presses through the dispatcher when it is there")
 hasnt("local RELEASE_FROM_OUTSIDE = false", "the dormant guard-release path stays deleted")
 print("FRAME_WIRING PASS " .. n .. " assertions")
