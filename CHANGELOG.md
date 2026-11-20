@@ -2,7 +2,7 @@
 
 Versions are the `tl.VERSION` value in `Scripts/main.lua`; the release tag is `v<version>`.
 
-## Unreleased
+## 1.6.10 — 2026-11-20
 
 ### 帧来源改由发送钩子回答（绕开会崩溃的引擎查询）
 

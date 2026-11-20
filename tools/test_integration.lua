@@ -217,7 +217,7 @@ eq(type(T.api), "table", "the public surface is listed")
 local missing = {}
 for _, name in ipairs(T.api) do if T[name] == nil then missing[#missing + 1] = name end end
 eq(#missing, 0, "documented api names exist: " .. table.concat(missing, ","))
-eq(T.VERSION, "1.6.9", "the version is stated once")
+eq(T.VERSION, "1.6.10", "the version is stated once")
 
 -- 1.6.5 test surface (audit P0-2, P0-3, P1-1): the runtime row, the per-frame
 -- decision chain and the release check are named seams now, so this suite drives
@@ -279,7 +279,7 @@ do
     S.seedFallback = oldMode
 end
 
--- 1.6.9: the queue is bounded even with parry off - its reaper used to be a side
+-- 1.6.10: the queue is bounded even with parry off - its reaper used to be a side
 -- effect of a stage that `parry` gates
 do
     local QT = _G.__QUEUE_TEST
@@ -668,7 +668,7 @@ eq(T.stopped, false, "the mod is armed again after the second teardown")
 T.hookIds = nil
 RegisterHook, UnregisterHook = realReg, realUnreg
 
--- 1.6.9: the reaper is wired into the per-frame decision chain itself, not into a
+-- 1.6.10: the reaper is wired into the per-frame decision chain itself, not into a
 -- stage that `parry` gates - the old cleanup only ran with parry on, so a
 -- parry-off session kept every queued attack. Driven through the real chain.
 do
@@ -695,6 +695,6 @@ eq(#gaps, 0, "the whole test surface is present: " .. table.concat(gaps, ","))
 
 if T.ledFlush then T.ledFlush() end
 local led = read("auto_defense_ledger.txt")
-assert(led:find("v1.6.9", 1, true), "the ledger states the running version: " .. led:sub(1, 200))
+assert(led:find("v1.6.10", 1, true), "the ledger states the running version: " .. led:sub(1, 200))
 n = n + 1
 print("INTEGRATION PASS " .. n .. " assertions")
