@@ -20,7 +20,7 @@ check_assertions() {
         fail=1
     fi
 }
-for t in test_policy test_async test_timeline test_query test_menu_config test_menu_bridge test_seed test_weapon test_counter test_compat test_toast test_api_contract test_inputstate test_abiinput test_frames test_frame_wiring; do
+for t in test_policy test_input test_async test_timeline test_query test_menu_config test_menu_bridge test_seed test_weapon test_counter test_compat test_toast test_api_contract test_inputstate test_abiinput test_frames test_frame_wiring; do
     if out=$(luajit "tools/$t.lua" 2>&1); then
         printf '%-24s %s\n' "$t" "$(printf '%s' "$out" | tail -1)"
         check_assertions "$t" "$out"

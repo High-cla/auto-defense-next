@@ -12,6 +12,7 @@ test_toast 52
 test_api_contract 56
 test_inputstate 64
 test_frames 27
-test_frame_wiring 24
+test_frame_wiring 29
 test_integration 187
 test_abiinput 38
+test_input 23

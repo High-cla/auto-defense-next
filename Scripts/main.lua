@@ -1044,6 +1044,10 @@ tl.installCounter = function()
     tl.weapon, tl.counter = weapon, counter
     log("counter: ready (hook %s, blue shield %s within %s cm)", tostring(settings.hookCounter),
         tostring(settings.shieldCounter), tostring(settings.shieldCounterRange))
+    if settings.shieldCounter == "on" and (tonumber(settings.shieldCounterRange) or 0) < 50 then
+        log("blue shield: shield_counter is on but shield_counter_range is %s cm, so no enemy can be inside it",
+            tostring(settings.shieldCounterRange))
+    end
     return weapon, counter
 end
 -- a grab (GA_*_GEx*: grab, then the execution) cannot be parried; its frame
@@ -2165,7 +2169,25 @@ do
     -- The Triangle press. EnhancedActionMappings is not scanned for it: doing that
     -- from Lua crashed inside UE4SS (null FProperty, 1.3.x), so the names the game
     -- uses for that key are tried in order and the first that resolves is kept.
-    tl.COUNTER_ACTIONS = { "IA_AttackH_Press", "IA_AttackH_Hold", "IA_AttackH_PressLong", "IA_AttackH" }
+    tl.COUNTER_ACTIONS = { "IA_AttackH_Press", "IA_AttackH_Hold", "IA_AttackH_PressLong", "IA_AttackH",
+        "IA_AttackHeavy", "IA_Attack_Heavy", "IA_HeavyAttack", "IA_StrongAttack", "IA_Attack2", "IA_Attack" }
+    -- the game build did not have any of the names above (1.6.11 session: "no Triangle
+    -- input action resolved"), so the first failure also lists what the game does have
+    tl.listInputActions = function()
+        local okF, all = pcall(FindAllOf, "InputAction")
+        if not okF or type(all) ~= "table" then
+            log("input actions: the object list could not be read (%s)", tostring(all))
+            return
+        end
+        local names = {}
+        for _, a in pairs(all) do
+            local okN, n = pcall(function() return a:GetFullName() end)
+            if okN and type(n) == "string" then names[#names + 1] = n end
+        end
+        table.sort(names)
+        log("input actions: %d found", #names)
+        for i = 1, math.min(#names, 60) do log("  IA: %s", names[i]) end
+    end
     tl.counterAction = function()
         if valid(tl.counterAct) then return tl.counterAct end
         local t = os.clock()
@@ -2179,8 +2201,9 @@ do
                 return a
             end
         end
-        once("noact", "counter: no Triangle input action resolved (%s), a black flash keeps the dodge",
+        once("noact", "counter: no Triangle input action resolved (%s)",
             table.concat(tl.COUNTER_ACTIONS, ", "))
+        pcall(tl.listInputActions)
         return nil
     end
     -- the main weapon in hand and the one a weapon switch brings out (backpack
@@ -4979,10 +5002,16 @@ end
 
 -- 1.6.10: seconds the ability waits until its hit point, read as a plain number
 -- from the ability object itself (PreHitPointDuration), BulletDuration as fallback.
+-- dot access, not obj["Field"]: a plain string index answered nil for every one of
+-- the 132 hook calls in the 1.6.11 session, so the frame model never got a frame
+local PREHIT_GET = {
+    function(a) return a.PreHitPointDuration end,
+    function(a) return a.BulletDuration end,
+}
 local function prehitOf(act)
     if not act then return nil end
-    for _, field in ipairs({ "PreHitPointDuration", "BulletDuration" }) do
-        local ok, v = pcall(function() return act[field] end)
+    for _, get in ipairs(PREHIT_GET) do
+        local ok, v = pcall(get, act)
         local n = ok and tonumber(unwrap(v)) or nil
         if n and n > 0 and n <= 5 then return n end
     end
@@ -5008,6 +5037,24 @@ local function onSendFrame(ctx, action, _bullet, _rotation, _, _, strength, dire
     -- 1.6.10: the mod's own record of the frame (see nearest): the hook says when
     -- it was created, the ability says how long until its hit point
     tl.hookSeen = (tl.hookSeen or 0) + 1
+    if not tl.prehitProbe then
+        tl.prehitProbe = true
+        local okC, cls = pcall(function() return act and act:GetClass():GetFName():ToString() end)
+        local function try(loader)
+            local okR, v = pcall(loader)
+            if not okR then return "error(" .. tostring(v):sub(1, 50) .. ")" end
+            local okU, u = pcall(unwrap, v)
+            local got = okU and u or v
+            return string.format("%s<%s>", tostring(got), type(got))
+        end
+        log("frames probe: class=%s prehit dot=%s bracket=%s fname=%s runtime dot=%s bullet dot=%s",
+            okC and tostring(cls) or "?",
+            try(function() return act.PreHitPointDuration end),
+            try(function() return act["PreHitPointDuration"] end),
+            try(function() return act[FName("PreHitPointDuration")] end),
+            try(function() return act.RuntimePreHitPointDuration end),
+            try(function() return act.BulletDuration end))
+    end
     if settings.readFrames and settings.frameSource ~= "game" and FRAMES then
         local pre = prehitOf(act)
         if not pre then tl.hookNoTime = (tl.hookNoTime or 0) + 1 end
@@ -5270,6 +5317,9 @@ do
         local IN = dofile(MOD_DIR .. "Scripts/ad_input.lua").attach({
             policy = pol, emit = tl.emit, log = log,
             pressRaw = tl.pressTap, release = tl.releaseHeldKey, endStance = endStance,
+            -- the key injection itself (dodge taps, dodge hold, tag presses): without this
+            -- binding every tl.input.inject answered false and no dodge key ever went out
+            inject = injectKey,
         })
         tl.policy, tl.input = pol, IN
         tl.pressTap = IN.pressGuard
