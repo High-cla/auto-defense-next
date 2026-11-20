@@ -64,17 +64,20 @@ for value = 0, 5 do
 end
 eq(named[6], nil, "the enum has six values, as declared")
 
--- 3. GetNearestValidReceivedFrame keeps its four-argument shape: the trailing
--- OutFrame table is not passed (the handle is only compared with >= 0, and the
--- out struct never comes back readable through UE4SS)
+-- 3. GetNearestValidReceivedFrame keeps its five-argument shape. The UFunction
+-- declares five parameters and UE4SS refuses a call with four in game
+-- ("UFunction expected 5 parameters, received 4"); dropping the OutFrame table in
+-- 1.6.8 therefore broke the query instead of trimming a dead argument. Its
+-- contents are still never read: the handle is only compared with >= 0.
 local call = src:match("GetNearestValidReceivedFrame%(([^)]*)%)")
 assert(call, "GetNearestValidReceivedFrame call not found")
-local args = 0
-for _ in call:gmatch("[^,]+") do args = args + 1 end
-eq(args, 4, "GetNearestValidReceivedFrame takes the four arguments the decision reads")
-eq(call:match("^%s*360%.0") ~= nil, true, "the first argument is the deflect angle")
-eq(call:match(",%s*%-1%s*$") ~= nil, true, "the current-handle sentinel stays -1, last")
-eq(call:find("RT.out", 1, true), nil, "no OutFrame table is passed")
+local parts = {}
+for piece in call:gmatch("[^,]+") do parts[#parts + 1] = (piece:match("^%s*(.-)%s*$")) end
+eq(#parts, 5, "GetNearestValidReceivedFrame passes all five declared parameters")
+eq(parts[1], "360.0", "the first argument is the deflect angle")
+eq(parts[4], "-1", "the current-handle sentinel stays -1")
+eq(parts[5]:find("{", 1, true) == nil, true, "the OutFrame table is passed by name, not built per call")
+eq(src:find("local outFrame = {}", 1, true) ~= nil, true, "one OutFrame table serves every call")
 
 -- 4. A real ReceiveFrame outranks a reference seed, and a seed action remains
 -- visible in the decision reason. These source-order contracts prevent a later

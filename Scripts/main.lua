@@ -215,7 +215,7 @@ local settings = { perfect = false, perfectMode = "give", blackFlash = "dodge", 
     -- the last dodge's i-frames to it (dodge_gap / dodge_iframe), pair timeline
     -- hits the game announces (pair_frames), check the game saw the press
     -- (receipt / receipt_retry) and count everything in the ledger
-    readFrames = true, parryLeadCfg = "auto", dodgeLead = 0.08, dodgeGap = 0.12, dodgeIframe = 0.26,
+    readFrames = true, frameSource = "hooks", parryLeadCfg = "auto", dodgeLead = 0.08, dodgeGap = 0.12, dodgeIframe = 0.26,
     pairFrames = true, receipt = false, receiptRetry = false, ledger = true, latency = true, data = true, dataOff = {}, dataTags = false,
     seedFallback = "record",
     -- 1.6.7: the 别离残钩 counter (black flash answered with hold guard + Triangle
@@ -287,6 +287,7 @@ do
                 for _, m in ipairs(DODGE_MODES) do if m == v then settings.dodge = v end end
             end
             if k == "read_frames" then settings.readFrames, settings.timingLine = v == "on", true end
+            if k == "frame_source" then settings.frameSource = v == "game" and "game" or "hooks" end
             if k == "pair_frames" then settings.pairFrames = v == "on" end
             if k == "receipt" then settings.receipt = v ~= "off" end
             if k == "receipt_retry" then settings.receiptRetry = v == "on" end
@@ -404,6 +405,10 @@ local function saveSettings()
     f:write("# read_frames: read every incoming hit's own time and type (DeflectComponent ReceiveFrames) so a\n")
     f:write("# press is timed to the hit; off = ask GetNearestValidReceivedFrame only (1.4.2 behaviour)\n")
     f:write("read_frames = " .. (settings.readFrames and "on" or "off") .. "\n")
+    f:write("# frame_source: where a hit's own time comes from - hooks (the send hook plus the\n")
+    f:write("#   ability's PreHitPointDuration) or game (DeflectComponent ReceiveFrames; that query\n")
+    f:write("#   crashed on 2026-11-20 builds) (hooks/game)\n")
+    f:write("frame_source = " .. (settings.frameSource or "hooks") .. "\n")
     f:write("data = " .. (settings.data and "on" or "off") .. "\n")
     f:write("data_tags = " .. (settings.dataTags and "on" or "off") .. "\n")
     f:write("# seed_fallback: off, record (log exact matches only), or on (dodge from reference no-frame seeds)\n")
@@ -463,12 +468,33 @@ local tagLibrary, component, ascOf, nowOf = Q.tagLibrary, Q.component, Q.ascOf, 
 
 -- Handle of the nearest incoming hit landing within `window` seconds, or -1.
 -- IsDodge true returns only the red hits (its handles never match the deflect
--- query's). The trailing OutFrame table is not passed: it never comes back
--- readable through UE4SS and the handle is only compared with >= 0, so the
--- query's own MaxPreimpactTime does the timing.
+-- query's). The OutFrame parameter is mandatory: the UFunction declares five
+-- parameters and UE4SS raises "expected 5 parameters, received 4" when it is
+-- omitted - dropping it in 1.6.8 broke this query in game, and with it the
+-- guard-release and dodge stages. Its contents are still never read: the handle
+-- is only compared with >= 0, so the query's own MaxPreimpactTime does the timing.
+local outFrame = {} -- one shared table: the callee fills it, the mod ignores it
+-- 1.6.10: the frames are answered from the send hook instead (ad_frames: the
+-- time the hook saw the frame, plus the ability's PreHitPointDuration). The
+-- engine query writes a struct that holds UObjects back into Lua, and that path
+-- crashed the game on 2026-11-20; frame_source = game brings it back for builds
+-- where it works. The ids are the model's own counter, which is all the callers
+-- ever use (a handle is only compared with >= 0 and used as a table key).
+local function loadFrames()
+    local ok, mod = pcall(dofile, MOD_DIR .. "Scripts/ad_frames.lua")
+    if ok and type(mod) == "table" and mod.new then
+        return mod.new({ now = os.clock, ttl = 2.0, cap = 64 })
+    end
+    log("frame model unavailable: the engine query stays in use")
+    return nil
+end
+local FRAMES = loadFrames()
 local function nearest(deflect, isDodge, window)
-    local handle = deflect:GetNearestValidReceivedFrame(360.0, window, isDodge, -1)
-    return tonumber(unwrap(handle)) or -1
+    if settings.frameSource == "game" or not FRAMES then
+        local handle = deflect:GetNearestValidReceivedFrame(360.0, window, isDodge, -1, outFrame)
+        return tonumber(unwrap(handle)) or -1
+    end
+    return FRAMES:nearest(isDodge == true, window, os.clock()) or -1
 end
 
 -- ---------------------------------------------------------------- special attacks
@@ -1259,6 +1285,19 @@ do
             fxDeflect = addr
         end
         fxTicks = fxTicks + 1
+        -- 1.6.10: in hook mode the frames arrive from the send hook, so the
+        -- component is not enumerated; the model is pruned here and FX follows it
+        if settings.frameSource ~= "game" then
+            local live = {}
+            if FRAMES then
+                FRAMES:prune()
+                for _, fr in ipairs(FRAMES:list()) do live[fr.id] = true end
+            end
+            for h in pairs(FX) do
+                if not live[h] then FX[h], FX_SEEN[h] = nil, nil end
+            end
+            return
+        end
         for h in pairs(fxPresent) do fxPresent[h] = nil end
         fxCur = deflect
         if not pcall(fxRun) then return end
@@ -1285,6 +1324,16 @@ do
         local e = FX[h]
         return e and e.type or nil
     end
+
+    -- 1.6.10: a frame announced by the send hook (id from ad_frames) gets the same
+    -- entry fxScan used to build: its hit time on the game clock, and its type.
+    tl.fxAdd = function(id, src, hit, typeName)
+        if not id or not hit then return false end
+        FX[id] = { src = src, hit = hit, type = typeName }
+        FX_SEEN[id] = fxTicks
+        return true
+    end
+    tl.frames = FRAMES
 
     -- The game's perfect window: Perfect Window - Last Deflect Click on the deflect
     -- passive, read right after a press (PBZAssist: 0.2667 s). A press less than
@@ -4892,6 +4941,18 @@ local function tagName(param)
     return ok and s or "?"
 end
 
+-- 1.6.10: seconds the ability waits until its hit point, read as a plain number
+-- from the ability object itself (PreHitPointDuration), BulletDuration as fallback.
+local function prehitOf(act)
+    if not act then return nil end
+    for _, field in ipairs({ "PreHitPointDuration", "BulletDuration" }) do
+        local ok, v = pcall(function() return act[field] end)
+        local n = ok and tonumber(unwrap(v)) or nil
+        if n and n > 0 and n <= 5 then return n end
+    end
+    return nil
+end
+
 -- Bullet and AttackRotation (SDK positions 2 and 3) are received and unused: the
 -- underscore prefix says so without pretending the hook has a different shape.
 local function onSendFrame(ctx, action, _bullet, _rotation, _, _, strength, direction, _, _, isDodge, counter)
@@ -4908,6 +4969,20 @@ local function onSendFrame(ctx, action, _bullet, _rotation, _, _, strength, dire
     local st, dir = tagName(strength), tagName(direction)
     local word = matchDodgeWord(actName .. " " .. st .. " " .. dir)
     enemyScanWanted = true
+    -- 1.6.10: the mod's own record of the frame (see nearest): the hook says when
+    -- it was created, the ability says how long until its hit point
+    if settings.readFrames and settings.frameSource ~= "game" and FRAMES then
+        local pre = prehitOf(act)
+        if pre then
+            local id = FRAMES:add({ at = os.clock(), prehit = pre, isDodge = okD and red == true, src = actName })
+            local gnow = id and currentPawn and nowOf(currentPawn) or nil
+            if id and gnow and gnow > 0 and tl.fxAdd then
+                local okB, blt = pcall(function() return unwrap(_bullet) end)
+                local typeName = okB and valid(blt) and short(blt:GetClass()) or nil
+                tl.fxAdd(id, actName, gnow + pre, typeName)
+            end
+        end
+    end
     attackLog("SEND %s | %s | strength=%s direction=%s isDodge=%s counter=%s%s",
         short(owner), actName, st, dir, okD and tostring(red) or "?", okK and short(ctr) or "?",
         word and ("  << dodge (" .. word .. ")") or "")
@@ -5322,7 +5397,9 @@ tl.main = function(id)
     local input = component(p, "Ability Input Component")
     currentPawn = p
     local experiments = settings.dodgeAttacks ~= "" or LEARN
-    if deflect and not RT.installed("attack") and (DEBUG or experiments) then hookAttacks(deflect) end
+    if deflect and not RT.installed("attack") and (settings.frameSource ~= "game" or DEBUG or experiments) then
+        hookAttacks(deflect)
+    end
     if deflect and input then tl.decide(p, deflect, input, nowOf(p)) end
     return false
 end

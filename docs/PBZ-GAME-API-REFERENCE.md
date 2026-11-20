@@ -123,14 +123,15 @@ GetNearestValidReceivedFrame 是当前模组最重要的游戏查询。SDK 的�
 
 ~~~lua
 local handle = deflect:GetNearestValidReceivedFrame(
-    360.0,  -- DeflectAngle
-    window, -- MaxPreimpactTime
+    360.0,    -- DeflectAngle
+    window,   -- MaxPreimpactTime
     isDodge,
-    -1      -- CurrentHandle
+    -1,       -- CurrentHandle
+    outFrame  -- OutFrame: 必传，内容不读
 )
 ~~~
 
-当前 Lua 路径只依赖返回的 handle（`>= 0` 即有效）与查询窗口，第 5 个实参 OutFrame 不传：SDK 的 $Ref<DeflectReceiveFrame> 是 PuerTS 参数引用，UE4SS Lua 里读不回来。
+当前 Lua 路径只依赖返回的 handle（`>= 0` 即有效）与查询窗口。第 5 个实参 OutFrame **必须传**：UFunction 的形参个数是固定的，少传一个 UE4SS 直接拒绝调用（`UFunction expected 5 parameters, received 4`，1.6.8 实测整段失效）。SDK 的 `$Ref<DeflectReceiveFrame>` 在 UE4SS Lua 里读不回来，所以传一个共享的空表、不读它的内容。
 
 **OutFrame 风险：** 在确认 Lua binding 每次调用都会完整覆盖输出字段、失败时的清空语义、table 转换成本之前，不应复用同一表，也不应把上次结果当作本次结果。减少分配必须通过受控 A/B 测试证明，不可臆测。
 

@@ -6,7 +6,7 @@ CHANGELOG, not here.
 
 | File | Lines | Owns |
 | --- | ---: | --- |
-| `Scripts/main.lua` | 5717 | hooks, tick orchestration, the decision chain (`tl.decide`), parry/dodge mechanics, ledger, perf, data loader |
+| `Scripts/main.lua` | 5794 | hooks, tick orchestration, the decision chain (`tl.decide`), parry/dodge mechanics, ledger, perf, data loader |
 | `Scripts/ad_query.lua` | 176 | read-only game queries: `valid/name/unwrap/num/prop/baseName/obj/tag/tagLibrary/component/ascOf/nowOf` (log injected); `tag` memoised, `baseName` is the one name rule |
 | `Scripts/ad_compat.lua` | 61 | the runtime compat layer: `gc(mode)` / `atan(y, x)` / `version()` / `hasJit()` — the two Lua-5.4-only calls live here and nowhere else |
 | `Scripts/ad_timeline.lua` | 60 | the learned timeline table **and** its count (`table/count/put/add/addRow/removeRow/get/recount/each`) |
@@ -14,10 +14,11 @@ CHANGELOG, not here.
 | `Scripts/ad_input.lua` | 75 | the controlled entry: `pressGuard/releaseGuard/endStance/tag/inject` — asks the rules, then calls the registered mechanic; `stats()` |
 | `Scripts/ad_inputstate.lua` | 110 | the game's own hold answer: `IsHolding`/`GetHoldTime` through the pawn's input component, `pick(held, keyHeld, injecting)` precedence, `read()` answers nil instead of guessing, and a self-revert (`dead`/`disable(why)`, 3 unfixable faults in a row or one manual call) after which `read` neither answers nor touches the game; readers injected, so the file has no game API and runs offline |
 | `Scripts/ad_seed.lua` | 105 | pure, stateless no-frame seed index/merger: exact normalized actor + ability match, inclusive distance gate, ±0.15 s dedupe, copy-on-write rows marked `source="seed"`; malformed reference data is rejected and existing/player rows keep priority |
+| `Scripts/ad_frames.lua` | 144 | the deflect frames seen from the sender's side: the send hook says when a frame was created and the ability says how long until its hit point (`PreHitPointDuration`). `add/nearest/get/prune/list/clear/stats`; the earliest due wins, a frame whose radius cannot cover the distance is skipped, a frame stays answerable 0.05 s past its due time, and the model is bounded by ttl and cap. No game API, so it runs offline |
 | `Scripts/ad_weapon.lua` | 159 | the read-only readers behind the counter: which weapon is held (`DualHook` in the name), how much shachi is there, and where the nearest blue-shielded enemy stands; readers are injected by `main.lua`, answers are cached per reader (~0.5 s), and each failure reason is logged once. Touches no game state |
 | `Scripts/ad_counter.lua` | 145 | the counter timing state machine: `offer/nextPress/guardUp/poll/pending/stats`, one counter in flight at a time, press window 0.22–0.35 s before the hit, `wait` means "ask again next tick"; owns no game state and injects nothing |
 | `Scripts/ad_async.lua` | 109 | in-process read-only event bus + budgeted warm-up queue |
-| `Scripts/ad_json.lua` / `Scripts/menu_config.lua` | 123 / 251 | strict flat JSON; native Mods Menu adapter (invariants, read-back, unknown-key naming) |
+| `Scripts/ad_json.lua` / `Scripts/menu_config.lua` | 123 / 252 | strict flat JSON; native Mods Menu adapter (invariants, read-back, unknown-key naming) |
 | `Scripts/ad_menu_bridge.lua` | 158 | the Mods Menu save-name shim: mirrors the menu's folded `pending-`/`saved-` names into the spelling the bridge watches and back; never writes the config |
 | `Scripts/toast.lua` | 208 | the toast notifications: one Delayed Action per show (retriggerable where available), handle kept and cancelled; never a resident loop |
 | `data/ad_data.lua` | 1.16 MB | frozen PBZAssist game-data snapshot, build=26367565, plus the separate provenance-bearing `reference_noframe` overlay. Existing PBZAssist tables remain the runtime data layer; regenerating them still needs the missing `Mods/PBZAssist/Scripts/enemy_data.lua`, while `tools/make_ad_data.lua` owns the additive reference overlay. |

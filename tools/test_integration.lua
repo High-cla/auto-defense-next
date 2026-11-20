@@ -138,11 +138,20 @@ T.check(true)
 eq(T.loopId, 1, "a manual retry resets the budget and restarts the loop")
 eq(T.loopDead, nil, "a manual retry clears the dead flag")
 
-local fake = { GetAddress = function() return 77 end, IsValid = function() return true end,
-    ReceiveFrames = { ForEach = function(_, fn)
-        fn({ get = function() return 7 end }, { get = function() return { HitGameTime = 100.5, IsDodge = false } end })
-    end } }
-assert(pcall(T.fxScan, fake, 100)); eq(T.fxDue(7, 100), .5)
+-- 1.6.10: the send hook is the producer now (frame_source = hooks by default),
+-- so the entry is written by tl.fxAdd instead of by enumerating ReceiveFrames
+assert(pcall(T.fxAdd, 7, "GA_X", 100.5, "BP_Bullet"))
+eq(T.fxDue(7, 100), .5, "a frame the hook announced answers with its own hit time")
+eq(T.fxType(7), "BP_Bullet", "and with the bullet type the hook saw")
+-- 1.6.10: frame_source = hooks (the default) answers from the model, not the component
+if T.frames then
+    S.frameSource = "hooks"
+    T.frames:clear()
+    local fid = T.frames:add({ at = os.clock(), prehit = 0.2, isDodge = false, src = "GA_HOOK" })
+    eq(T.frames:nearest(false, 0.3, os.clock()), fid, "the hook-fed model answers the frame query")
+    eq(T.frames:nearest(true, 0.3, os.clock()), nil, "and keeps dodge and parry frames apart")
+    S.frameSource = "game"
+end
 T.tapPending, T.receipt = {h=7, at=0}, {h=7, click0=0, game=0}
 local raw = assert(json.decode(initial))
 raw.read_frames, raw.receipt, raw.parry = false, false, false
@@ -484,6 +493,9 @@ do
             end,
         }
     end
+    -- 1.6.10: this block's fakes answer the engine query, so ask the engine here;
+    -- frame_source = hooks (the shipped default) is covered by the model block above
+    S.frameSource = "game"
     if type(decide) == "function" then
         T.tapEndAt = -100 -- no tap in flight: a due press goes out at once
         S.parry = false

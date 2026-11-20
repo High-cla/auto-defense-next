@@ -22,6 +22,7 @@ M.schema = {
     { key = "perf", field = "perf", kind = "toggle", default = false, limits = nil, restart = false, scale = 1 },
     { key = "events", field = "events", kind = "toggle", default = true, limits = nil, restart = false, scale = 1 },
     { key = "read_frames", field = "readFrames", kind = "toggle", default = true, limits = nil, restart = false, scale = 1 },
+    { key = "frame_source", field = "frameSource", kind = "choice", default = "hooks", limits = {"hooks", "game"}, restart = false, scale = 1 },
     { key = "parry_lead", field = "parryLeadCfg", kind = "choice", default = "auto", limits = {"auto", "manual"}, restart = false, scale = 1 },
     { key = "parry_lead_seconds", field = "parryLeadCfg", kind = "number", default = 0.08, limits = {0, 1, 0.01}, restart = false, scale = 1 },
     { key = "dodge_lead_ms", field = "dodgeLead", kind = "number", default = 80, limits = {0, 1000, 10}, restart = false, scale = 0.001 },

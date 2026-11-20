@@ -2,6 +2,22 @@
 
 Versions are the `tl.VERSION` value in `Scripts/main.lua`; the release tag is `v<version>`.
 
+## Unreleased
+
+### 帧来源改由发送钩子回答（绕开会崩溃的引擎查询）
+
+- 新增 `Scripts/ad_frames.lua`（纯模型：帧的创建时刻 + 招式自身的 `PreHitPointDuration`），`nearest()` 改由它回答，不再调用 `DeflectComponent:GetNearestValidReceivedFrame`——那条路径要把含 UObject 的结构写回 Lua，2026-11-20 的游戏崩溃正发生在它上面。
+- 新配置键 `frame_source`（`hooks` 默认 / `game` 回到引擎查询），`auto_defense.txt` 与菜单都可改；旧的五实参调用保留在 `game` 分支里，不会因形参个数被 UE4SS 拒绝。
+- `read_frames` 含义收紧：钩子模式下它只控制是否读取招式的 `PreHitPointDuration` 并换算命中时刻，不再枚举 `ReceiveFrames`。
+
+### 恢复 GetNearestValidReceivedFrame 的第五个实参（1.6.8 / 1.6.9 实机回归）
+
+1.6.8 认为 OutFrame 出参「经 UE4SS 读不回来、传它没有作用」就把它删了。实机证明这个 UFunction 声明了五个形参，少传一个 UE4SS 直接拒绝调用：`main.lua:470 -> UFunction::setup_metamethods -> __call: UFunction expected 5 parameters, received 4`（v1.6.9，15:16:45 与 15:18:48，报在 `guard release` 与 `dodge` 两个阶段）。凡走这个查询的分支——格挡解除、闪避、以及两者的窗口判定——都在抛错后被 `guarded` 的退避逐步按下，等于失效。
+
+修复：恢复传第五个实参，用一个共享空表（`local outFrame = {}`），延续「内容从不读取」的约定——句柄仍只与 `>= 0` 比较，计时仍由查询自身的 MaxPreimpactTime 负责。`tools/test_api_contract.lua` 的契约从「四实参、不得传 OutFrame」改成「五实参、第五个是共享表而非每帧新建」，`docs/PBZ-GAME-API-REFERENCE.md`、`docs/DEFLECT-STATE-MACHINE.md`、`docs/API-OPTIMIZATION-ROADMAP.md` 同步。
+
+教训：源码形状断言会固化一个错误信念——1.6.8 甚至专门加了「不得再传 OutFrame」的断言，门禁全绿，而只有实机能否证它。
+
 ## 1.6.9 — 2026-11-20
 
 ### 时间线队列不再寄生在被 `parry` 门控的循环里
