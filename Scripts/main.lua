@@ -534,7 +534,7 @@ local tl = { BLACK_LEAD = 0.5, GIVE_RELEASE = 0.6, BULLET_HOLD = 1.2, TORNADO_MO
 -- traceback the first time it is seen, so a broken hook is visible with debug = off
 -- (until 1.6.2 those three went to attackLog, which returns at once unless DEBUG).
 do
-    tl.VERSION = "1.6.8"
+    tl.VERSION = "1.6.9"
     tl.errs = {}
     function tl.err(what, err)
         local n = (tl.errs[what] or 0) + 1

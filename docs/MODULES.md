@@ -1,4 +1,4 @@
-# Module layout (1.6.8)
+# Module layout (1.6.9)
 
 Decision and execution order is unchanged. What moved is **where each concern lives**
 and **which door every side effect goes through**. Behaviour changes are listed in the
@@ -6,7 +6,7 @@ CHANGELOG, not here.
 
 | File | Lines | Owns |
 | --- | ---: | --- |
-| `Scripts/main.lua` | 5687 | hooks, tick orchestration, the decision chain (`tl.decide`), parry/dodge mechanics, ledger, perf, data loader |
+| `Scripts/main.lua` | 5717 | hooks, tick orchestration, the decision chain (`tl.decide`), parry/dodge mechanics, ledger, perf, data loader |
 | `Scripts/ad_query.lua` | 176 | read-only game queries: `valid/name/unwrap/num/prop/baseName/obj/tag/tagLibrary/component/ascOf/nowOf` (log injected); `tag` memoised, `baseName` is the one name rule |
 | `Scripts/ad_compat.lua` | 61 | the runtime compat layer: `gc(mode)` / `atan(y, x)` / `version()` / `hasJit()` — the two Lua-5.4-only calls live here and nowhere else |
 | `Scripts/ad_timeline.lua` | 60 | the learned timeline table **and** its count (`table/count/put/add/addRow/removeRow/get/recount/each`) |
@@ -16,7 +16,7 @@ CHANGELOG, not here.
 | `Scripts/ad_seed.lua` | 105 | pure, stateless no-frame seed index/merger: exact normalized actor + ability match, inclusive distance gate, ±0.15 s dedupe, copy-on-write rows marked `source="seed"`; malformed reference data is rejected and existing/player rows keep priority |
 | `Scripts/ad_weapon.lua` | 159 | the read-only readers behind the counter: which weapon is held (`DualHook` in the name), how much shachi is there, and where the nearest blue-shielded enemy stands; readers are injected by `main.lua`, answers are cached per reader (~0.5 s), and each failure reason is logged once. Touches no game state |
 | `Scripts/ad_counter.lua` | 145 | the counter timing state machine: `offer/nextPress/guardUp/poll/pending/stats`, one counter in flight at a time, press window 0.22–0.35 s before the hit, `wait` means "ask again next tick"; owns no game state and injects nothing |
-| `Scripts/ad_async.lua` | 104 | in-process read-only event bus + budgeted warm-up queue |
+| `Scripts/ad_async.lua` | 109 | in-process read-only event bus + budgeted warm-up queue |
 | `Scripts/ad_json.lua` / `Scripts/menu_config.lua` | 123 / 251 | strict flat JSON; native Mods Menu adapter (invariants, read-back, unknown-key naming) |
 | `Scripts/ad_menu_bridge.lua` | 158 | the Mods Menu save-name shim: mirrors the menu's folded `pending-`/`saved-` names into the spelling the bridge watches and back; never writes the config |
 | `Scripts/toast.lua` | 208 | the toast notifications: one Delayed Action per show (retriggerable where available), handle kept and cancelled; never a resident loop |

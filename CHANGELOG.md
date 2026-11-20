@@ -2,6 +2,24 @@
 
 Versions are the `tl.VERSION` value in `Scripts/main.lua`; the release tag is `v<version>`.
 
+## 1.6.9 — 2026-11-20
+
+### 时间线队列不再寄生在被 `parry` 门控的循环里
+
+队列（`tlQueue`）的回收原来是 `tickTimelineGuard` 的副作用，而该阶段由 `parry` 门控、`parry` 又是热切换：把弹反关掉后队列只增不减，每条都钉住 actor 与命中表，整局都不释放。现在 `tl.reapQueue` 独占回收——按 `done` 与存活期清理，并加 32 条硬上限（先丢最旧的、且没有未完成命中项的条目；还有命中要打的绝不丢）。入队路径与 `tl.decide` 都直接调用它，与任何设置无关。行为不变，只是内存有界。
+
+### 异步总线不再误删健康订阅者
+
+`ad_async` 的 drain 把每次失败的订阅者下标追加进列表再逆序删除：同一个订阅者在一次 drain 里失败两次，就会把相邻的健康订阅者一起删掉（实测两个事件后 `subs=0`，健康订阅者从此收不到事件）。改成按下标置位的集合 + 一次性过滤重建。
+
+### 打包器缺文件即失败
+
+`tools/package.py` 遇到缺失的必需文件原来只打印一行 `missing (skipped)` 并返回 0，坏包仍能继续上传。现在先校验完整再写包，缺文件时在 stderr 列出并以退出码 1 结束，`dist/` 里不会留下半成品。
+
+### 推送即跑门禁，断言数有下限
+
+新增 `.github/workflows/ci.yml`：`push` 与 `pull_request` 都跑完整门禁，并强制 `AD_REQUIRE_SELENE=1 AD_REQUIRE_LUA54=1`——原来唯一的 workflow 只接受手动触发，本地 pre-commit 又是可选安装的钩子，等于没有任何自动门禁。`tools/assertions.min` 记下每套的最小断言数，`tools/run_all.sh` 实测低于基线即失败，断言被静默删掉不再能过关。
+
 ## 1.6.8 — 2026-11-20
 
 ### 最近受击帧查询不再传 OutFrame

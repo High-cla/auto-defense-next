@@ -173,6 +173,7 @@ ad_async 使用容量 512 的 ring buffer 收集只读事件，每 tick 最多 d
 - ad_policy 拥有 allow/deny 规则与拒绝计数。
 - ad_input 拥有 side-effect entry bindings，不拥有具体决策。
 - ad_seed 只拥有规范化索引和纯合并规则；main.lua 继续拥有 q.tapped、ReceiveFrame 配对和时间轴生命周期。
+- main.lua 的 `tlQueue` 由 `tl.reapQueue` 独占回收与封顶：它按 `done`/存活期清理，并把条目压到 32 条以内，绝不丢还有命中要打的项。这个回收不寄生在任何设置门控的阶段里——`parry` 关掉时队列依旧会被压回上限。
 - ad_weapon 只拥有读取缓存、失败原因和 stats；ad_counter 只拥有一次在途反制的时序（pending / pressOwed / 确认窗口）。按键注入、格挡保持和武器切换仍由 main.lua 执行。
 - menu_config 的 raw 和 lastText 对应最近一份通过验证的 JSON；pending 对应本次运行需重启的字段。
 - ad_menu_bridge 只拥有自己的文件名镜像统计和轮询节流，不拥有配置语义。
