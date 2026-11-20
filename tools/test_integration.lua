@@ -208,7 +208,7 @@ eq(type(T.api), "table", "the public surface is listed")
 local missing = {}
 for _, name in ipairs(T.api) do if T[name] == nil then missing[#missing + 1] = name end end
 eq(#missing, 0, "documented api names exist: " .. table.concat(missing, ","))
-eq(T.VERSION, "1.6.7", "the version is stated once")
+eq(T.VERSION, "1.6.8", "the version is stated once")
 
 -- 1.6.5 test surface (audit P0-2, P0-3, P1-1): the runtime row, the per-frame
 -- decision chain and the release check are named seams now, so this suite drives
@@ -641,6 +641,6 @@ eq(#gaps, 0, "the whole test surface is present: " .. table.concat(gaps, ","))
 
 if T.ledFlush then T.ledFlush() end
 local led = read("auto_defense_ledger.txt")
-assert(led:find("v1.6.7", 1, true), "the ledger states the running version: " .. led:sub(1, 200))
+assert(led:find("v1.6.8", 1, true), "the ledger states the running version: " .. led:sub(1, 200))
 n = n + 1
 print("INTEGRATION PASS " .. n .. " assertions")

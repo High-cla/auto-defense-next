@@ -64,14 +64,17 @@ for value = 0, 5 do
 end
 eq(named[6], nil, "the enum has six values, as declared")
 
--- 3. GetNearestValidReceivedFrame keeps its five-argument shape
+-- 3. GetNearestValidReceivedFrame keeps its four-argument shape: the trailing
+-- OutFrame table is not passed (the handle is only compared with >= 0, and the
+-- out struct never comes back readable through UE4SS)
 local call = src:match("GetNearestValidReceivedFrame%(([^)]*)%)")
 assert(call, "GetNearestValidReceivedFrame call not found")
 local args = 0
 for _ in call:gmatch("[^,]+") do args = args + 1 end
-eq(args, 5, "GetNearestValidReceivedFrame takes the five SDK arguments")
+eq(args, 4, "GetNearestValidReceivedFrame takes the four arguments the decision reads")
 eq(call:match("^%s*360%.0") ~= nil, true, "the first argument is the deflect angle")
-eq(call:match(",%s*%-1%s*,") ~= nil, true, "the current-handle sentinel stays -1")
+eq(call:match(",%s*%-1%s*$") ~= nil, true, "the current-handle sentinel stays -1, last")
+eq(call:find("RT.out", 1, true), nil, "no OutFrame table is passed")
 
 -- 4. A real ReceiveFrame outranks a reference seed, and a seed action remains
 -- visible in the decision reason. These source-order contracts prevent a later

@@ -98,7 +98,7 @@ Q.attach(log)
 -- (Scripts/ad_compat.lua when present, an inline fallback that cannot throw when
 -- not). The version is logged once, so "the game is 5.4" is evidence, not a guess.
 -- One table, not four locals: the main chunk is at the 200-active-locals ceiling.
-local RT = { out = {} }
+local RT = {}
 do
     local ok, m = pcall(dofile, MOD_DIR .. "Scripts/ad_compat.lua")
     if ok and type(m) == "table" then RT.compat = m end
@@ -463,10 +463,11 @@ local tagLibrary, component, ascOf, nowOf = Q.tagLibrary, Q.component, Q.ascOf, 
 
 -- Handle of the nearest incoming hit landing within `window` seconds, or -1.
 -- IsDodge true returns only the red hits (its handles never match the deflect
--- query's). The OutFrame struct does not come back readable through UE4SS, so
--- the query's own MaxPreimpactTime does the timing.
+-- query's). The trailing OutFrame table is not passed: it never comes back
+-- readable through UE4SS and the handle is only compared with >= 0, so the
+-- query's own MaxPreimpactTime does the timing.
 local function nearest(deflect, isDodge, window)
-    local handle = deflect:GetNearestValidReceivedFrame(360.0, window, isDodge, -1, RT.out)
+    local handle = deflect:GetNearestValidReceivedFrame(360.0, window, isDodge, -1)
     return tonumber(unwrap(handle)) or -1
 end
 
@@ -533,7 +534,7 @@ local tl = { BLACK_LEAD = 0.5, GIVE_RELEASE = 0.6, BULLET_HOLD = 1.2, TORNADO_MO
 -- traceback the first time it is seen, so a broken hook is visible with debug = off
 -- (until 1.6.2 those three went to attackLog, which returns at once unless DEBUG).
 do
-    tl.VERSION = "1.6.7"
+    tl.VERSION = "1.6.8"
     tl.errs = {}
     function tl.err(what, err)
         local n = (tl.errs[what] or 0) + 1
