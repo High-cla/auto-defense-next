@@ -10,7 +10,7 @@
 
 - 唯一配置源：`pbz-auto-defense.config.json`；菜单描述：[pbz-auto-defense.modsmenu.json](../pbz-auto-defense.modsmenu.json)。字段 schema 由 [CONFIGURATION-REFERENCE.md](CONFIGURATION-REFERENCE.md) 解释。
 - 首次缺 JSON 时，将原有 `auto_defense.txt` 导入，之后不再同步写 TXT；已有 JSON 不覆盖。TXT 留作回滚。
-- **默认参数（1.6.4 起）**：`pbz-auto-defense.config.json`、描述符每行 `default`、`Scripts/main.lua` 的 `settings` 初值三处取同一组值——本版实机调过的设置：perfect=false、perfect_mode=give、dodge=red、parry=true、parry_method=key、parry_reach=0.5、guard_release_after=0.5、guard_release_combat_end=0.5、parry_lead=auto（manual 0.08）、dodge_lead_ms=80、dodge_gap_ms=120、dodge_iframe_ms=260、min_gap_ms=120、grab_lead_ms=240、receipt=false、dodge_cd=false、busy_skip=false、learn=true、data=true、seed_fallback=record、hook_counter=off、hook_counter_shachi=37、shield_counter=off、shield_counter_range=1500、pbzpd=auto，热键 F7/F8/F9/F6。三处不一致时以 JSON 为准，但新装/重置应得到同一套。
+- **默认参数（1.6.4 起）**：`pbz-auto-defense.config.json`、描述符每行 `default`、`Scripts/main.lua` 的 `settings` 初值三处取同一组值——本版实机调过的设置：perfect=false、perfect_mode=give、dodge=red、parry=true、parry_method=key、parry_reach=0.5、guard_release_after=0.5、guard_release_combat_end=0.5、parry_lead=auto（manual 0.08）、dodge_lead_ms=80、dodge_gap_ms=120、dodge_iframe_ms=260、min_gap_ms=120、grab_lead_ms=240、receipt=false、dodge_cd=false、busy_skip=false、learn=true、data=true、seed_fallback=record、hook_counter=off、shield_counter=off、shield_counter_range=1500、pbzpd=auto，热键 F7/F8/F9/F6。三处不一致时以 JSON 为准，但新装/重置应得到同一套。
 - 当前 schema 为 46 个 JSON 字段与描述符逐项对应，44 个菜单可编辑，2 个自由文本只读。原生菜单没有任意字符串编辑器，不能声称全部字段都能在菜单输入文本。完整字段表、双语注释、类型/默认值/范围和迁移规则见 [CONFIGURATION-REFERENCE.md](CONFIGURATION-REFERENCE.md)。
 - `parry_lead` 分成 auto/manual 模式；手动值在 `parry_lead_seconds`。其余 `*_ms` 在 JSON/菜单用毫秒，内部转换为秒。
 - 未知平面字段保留；非法 JSON、错误类型、越界数值和嵌套对象/数组拒绝应用并保留最后有效运行态，不偷偷覆盖坏文件。

@@ -407,12 +407,13 @@ do
     eq(T.counterKind(normal), nil, "both features off: a normal hit keeps its rule")
     S.hookCounter = "on"
     eq(T.counterKind(black), "black", "hook_counter on: a black flash asks for the counter")
-    eq(T.counterKind(normal), nil, "hook_counter on: a normal hit stays a parry")
+    -- 2026-11-21: the black-flash type gate was removed, every hit asks now
+    eq(T.counterKind(normal), "black", "hook_counter on: every hit asks for the counter")
     S.hookCounter = "off"
     S.shieldCounter = "on"
     eq(T.counterKind(normal), "shield", "shield_counter on: a blockable hit asks for the counter")
     eq(T.counterKind(seedRow), nil, "a dodge-only reference row is never countered")
-    eq(T.counterKind(black), nil, "shield_counter alone does not take a black flash")
+    eq(T.counterKind(black), "shield", "the shield counter answers a black flash when the hook counter is off")
     S.shieldCounter = "off"
     -- The state machines are the real modules; the weapon reader is replaced so the
     -- gate can be opened without a backpack (its own cache would hide the change).

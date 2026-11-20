@@ -70,30 +70,13 @@
       "default": "off",
       "restart": false,
       "help": {
-        "en": "Off leaves every behavior exactly as before. On: holding a DualHook weapon (别离残钩) with shachi at or above hook_counter_shachi turns a black-flash (PowerAttack) check into block-and-triangle counter instead of dodge or parry.",
-        "zh-Hans": "关闭时行为与升级前完全一致。开启后：手持别离残钩（DualHook）且杀气不低于 hook_counter_shachi 时，黑光（PowerAttack）判定改为「按住格挡＋三角形」反制，不再按黑闪设置闪避/弹反。"
+        "en": "Off leaves every behavior exactly as before. On: with a DualHook weapon (别离残钩) in hand, every hit is answered with the block-and-triangle counter instead of dodge or parry.",
+        "zh-Hans": "关闭时行为与升级前完全一致。开启后：手持别离残钩（DualHook）时，每一次命中都改为「按住格挡＋三角形」反制，不再闪避或弹反。"
       },
       "options": [
         "off",
         "on"
       ]
-    },
-    {
-      "key": "hook_counter_shachi",
-      "type": "number",
-      "label": {
-        "en": "hook_counter_shachi",
-        "zh-Hans": "反制杀气阈值（%）"
-      },
-      "default": 37,
-      "restart": false,
-      "help": {
-        "en": "Shachi percentage the hook counter needs. Read only while hook_counter is on; below it a black flash still follows the black_flash setting.",
-        "zh-Hans": "别离残钩反制所需的杀气百分比。仅在 hook_counter 开启时读取；低于该值时黑光仍按 black_flash 设置处理。"
-      },
-      "min": 0,
-      "max": 100,
-      "step": 1
     },
     {
       "key": "shield_counter",

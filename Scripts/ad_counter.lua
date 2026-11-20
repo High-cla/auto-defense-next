@@ -58,9 +58,9 @@ function M.new(opts)
 
     function o:offer(kind, hitAt, ttl, ctx)
         local c = type(ctx) == "table" and ctx or {}
-        -- the counter only exists with the weapon in hand, 杀气 above the gate and
-        -- the counter input action resolved; anything else keeps the normal defence
-        if c.held ~= true or c.shachiOk ~= true or c.action ~= true then return nil end
+        -- the counter only exists with the weapon in hand and the counter input
+        -- action resolved; anything else keeps the normal defence
+        if c.held ~= true or c.action ~= true then return nil end
         if pending then return nil end -- one counter at a time
         local timeToHit, hit = num(ttl), num(hitAt)
         if not timeToHit or not hit then return nil end

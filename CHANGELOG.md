@@ -4,6 +4,13 @@ Versions are the `tl.VERSION` value in `Scripts/main.lua`; the release tag is `v
 
 ## Unreleased
 
+### 反制触发条件放宽（删掉两个从未命中的判定）
+
+- `Scripts/main.lua` 的 `tl.counterKind` 不再读黑光类型：`hook_counter=on` 时任何命中都进入反制（原条件 `h.t == "4"` 在 33 分钟实机会话里一次都没成立）。
+- `Scripts/ad_counter.lua` 的 `offer()` 不再要求 `shachiOk`：杀气阈值判定删除（原 `hook_counter_shachi` 默认 37，实机配置 30 也没走到）。`held`（手持别离残钩）与 `action`（三角输入解析成功）两个门保留。
+- `hook_counter_shachi` 从菜单 schema、`settings`、`auto_defense.txt` 读写与文档里移除；旧配置 JSON 里的该键由 `menu_config.M.retired` 静默忽略，不会报 "unknown key"。
+- 保留的部分：按键仍走 `ad_abiinput`（游戏自身输入分发优先，向量注入回落），窗口仍是命中前 0.22–0.35 s，`q.countered` 抑制链不变。
+
 ### 反制按键改走游戏自己的能力输入分发
 
 - 新增 `Scripts/ad_abiinput.lua`：`press(action)` 先调 `AbilityInputComponent:HandleInputAction(asc, action)`（真实按键走的那条路，同一帧可以先按架势再按三角），被拒绝、抛错或拿不到 ASC 时回落到原来的单帧向量注入；`landed()` 在按键后 0.05 s 用 `hasTag(asc, "Ability.Action.Stance")` 回读架势是否真的起手。

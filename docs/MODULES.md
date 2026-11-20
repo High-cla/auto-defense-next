@@ -6,7 +6,7 @@ CHANGELOG, not here.
 
 | File | Lines | Owns |
 | --- | ---: | --- |
-| `Scripts/main.lua` | 5837 | hooks, tick orchestration, the decision chain (`tl.decide`), parry/dodge mechanics, ledger, perf, data loader |
+| `Scripts/main.lua` | 5835 | hooks, tick orchestration, the decision chain (`tl.decide`), parry/dodge mechanics, ledger, perf, data loader |
 | `Scripts/ad_query.lua` | 176 | read-only game queries: `valid/name/unwrap/num/prop/baseName/obj/tag/tagLibrary/component/ascOf/nowOf` (log injected); `tag` memoised, `baseName` is the one name rule |
 | `Scripts/ad_compat.lua` | 61 | the runtime compat layer: `gc(mode)` / `atan(y, x)` / `version()` / `hasJit()` — the two Lua-5.4-only calls live here and nowhere else |
 | `Scripts/ad_timeline.lua` | 60 | the learned timeline table **and** its count (`table/count/put/add/addRow/removeRow/get/recount/each`) |
@@ -19,7 +19,7 @@ CHANGELOG, not here.
 | `Scripts/ad_counter.lua` | 145 | the counter timing state machine: `offer/nextPress/guardUp/poll/pending/stats`, one counter in flight at a time, press window 0.22–0.35 s before the hit, `wait` means "ask again next tick"; owns no game state and injects nothing |
 | `Scripts/ad_abiinput.lua` | 98 | which way a counter key reaches the game: `press(action)` goes through the game's own ability input dispatch (`AbilityInputComponent:HandleInputAction`, the round trip a real key takes) and falls back to the one-frame vector injection when the dispatch refuses, raises or has no asc; `landed()` reads the stance back through `hasTag`, and three faults in a row revert the adapter for the session (`dead`/`why`, `disable(why)` is idempotent). Readers injected, no game API, no `pcall` closures on the hot path |
 | `Scripts/ad_async.lua` | 109 | in-process read-only event bus + budgeted warm-up queue |
-| `Scripts/ad_json.lua` / `Scripts/menu_config.lua` | 123 / 252 | strict flat JSON; native Mods Menu adapter (invariants, read-back, unknown-key naming) |
+| `Scripts/ad_json.lua` / `Scripts/menu_config.lua` | 123 / 254 | strict flat JSON; native Mods Menu adapter (invariants, read-back, unknown-key naming) |
 | `Scripts/ad_menu_bridge.lua` | 158 | the Mods Menu save-name shim: mirrors the menu's folded `pending-`/`saved-` names into the spelling the bridge watches and back; never writes the config |
 | `Scripts/toast.lua` | 208 | the toast notifications: one Delayed Action per show (retriggerable where available), handle kept and cancelled; never a resident loop |
 | `data/ad_data.lua` | 1.16 MB | frozen PBZAssist game-data snapshot, build=26367565, plus the separate provenance-bearing `reference_noframe` overlay. Existing PBZAssist tables remain the runtime data layer; regenerating them still needs the missing `Mods/PBZAssist/Scripts/enemy_data.lua`, while `tools/make_ad_data.lua` owns the additive reference overlay. |

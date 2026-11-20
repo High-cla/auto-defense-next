@@ -41,10 +41,10 @@ local clock = 0
 local function now() return clock end
 local function T(x) clock = x; return x end
 
-local OK = { held = true, shachiOk = true, action = true }
+local OK = { held = true, action = true }
 
 local function ctx(over)
-    local c = { held = true, shachiOk = true, action = true }
+    local c = { held = true, action = true }
     for k, v in pairs(over or {}) do c[k] = v end
     return c
 end
@@ -60,19 +60,20 @@ local function counter(opts)
 end
 
 local function body()
-    -- 1. the three gates: weapon in hand, 杀气 high enough, input action resolved.
+    -- 1. the two gates: weapon in hand, input action resolved.
     local c = counter()
     check(type(c) == "table", "new returns an instance")
     eq(c:offer("parry", 100, 0.30, ctx({ held = false })), nil, "not in hand: no counter")
-    eq(c:offer("parry", 100, 0.30, ctx({ shachiOk = false })), nil, "not enough 杀气: no counter")
     eq(c:offer("parry", 100, 0.30, ctx({ action = false })), nil, "no input action: no counter")
-    eq(c:offer("parry", 100, 0.30, { held = true, shachiOk = true }), nil, "a missing action is not true")
-    eq(c:offer("parry", 100, 0.30, { held = true, action = true }), nil, "a missing 杀气 answer is not true")
+    eq(c:offer("parry", 100, 0.30, { held = true }), nil, "a missing action is not true")
     eq(c:offer("parry", 100, 0.30, nil), nil, "no context at all: no counter")
     eq(c:offer("parry", 100, 0.30, "nope"), nil, "a malformed context is not a counter")
     eq(c:pending(), nil, "a refused offer leaves nothing pending")
     eq(c:stats().presses, 0, "a refused offer is not a press")
     eq(c:stats().waits, 0, "a refused offer is not a wait")
+    local g2 = counter()
+    eq(g2:offer("parry", 100, 0.30, { held = true, action = true }), "press", "the weapon and the action are the only gates")
+    eq(g2:stats().presses, 1, "that offer is a press")
 
     -- 2. the 0.22 s .. 0.35 s window before the hit.
     local w1 = counter()

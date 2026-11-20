@@ -105,7 +105,7 @@ local blackBranch = src:find("if h.t == \"4\" and not countered", 1, true)
 eq(counteredTry ~= nil and blackBranch ~= nil and counteredTry < blackBranch, true,
    "the counter decides before the black-flash branch")
 eq(src:find("local dodgeIt = not countered and", 1, true) ~= nil, true, "a countered hit is not dodged")
-eq(src:find('hookCounter = "off", hookCounterShachi = 37, shieldCounter = "off"', 1, true) ~= nil, true,
+eq(src:find('hookCounter = "off", shieldCounter = "off"', 1, true) ~= nil, true,
    "both counter features are off by default")
 eq(src:find('if settings.hookCounter == "on" or settings.shieldCounter == "on" then', 1, true) ~= nil, true,
    "the counter ticks are only scheduled when a feature is on")

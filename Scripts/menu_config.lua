@@ -5,7 +5,6 @@ M.schema = {
     { key = "perfect_mode", field = "perfectMode", kind = "choice", default = "give", limits = {"always", "give", "window"}, restart = true, scale = 1 },
     { key = "black_flash", field = "blackFlash", kind = "choice", default = "dodge", limits = {"dodge", "parry"}, restart = true, scale = 1 },
     { key = "hook_counter", field = "hookCounter", kind = "choice", default = "off", limits = {"off", "on"}, restart = false, scale = 1 },
-    { key = "hook_counter_shachi", field = "hookCounterShachi", kind = "number", default = 37, limits = {0, 100, 1}, restart = false, scale = 1 },
     { key = "shield_counter", field = "shieldCounter", kind = "choice", default = "off", limits = {"off", "on"}, restart = false, scale = 1 },
     { key = "shield_counter_range", field = "shieldCounterRange", kind = "number", default = 1500, limits = {0, 3000, 50}, restart = false, scale = 1 },
     { key = "dodge", field = "dodge", kind = "choice", default = "red", limits = {"off", "red", "all"}, restart = true, scale = 1 },
@@ -49,6 +48,9 @@ M.schema = {
     { key = "key_parry", field = "keys.parry", kind = "choice", default = "F9", limits = {"none", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "CTRL+F6", "CTRL+F7", "CTRL+F8", "CTRL+F9", "CTRL+F10", "CTRL+F11", "CTRL+F12"}, restart = true, scale = 1 },
     { key = "key_snapshot", field = "keys.snapshot", kind = "choice", default = "F6", limits = {"none", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12", "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "CTRL+F6", "CTRL+F7", "CTRL+F8", "CTRL+F9", "CTRL+F10", "CTRL+F11", "CTRL+F12"}, restart = true, scale = 1 },
 }
+
+-- keys an older config may still carry: read as "do nothing", never reported as unknown
+M.retired = { hook_counter_shachi = true }
 
 local function readFile(path)
     local f, _, code = io.open(path, "rb")
@@ -162,7 +164,7 @@ function M.new(settings, opts)
         local known = {}
         for _, row in ipairs(M.schema) do known[row.key] = true end
         for k in pairs(raw) do
-            if not known[k] and not self.unknown[k] then
+            if not known[k] and not M.retired[k] and not self.unknown[k] then
                 self.unknown[k] = true
                 if opts.log then opts.log("menu config: unknown key ignored: " .. tostring(k)) end
             end

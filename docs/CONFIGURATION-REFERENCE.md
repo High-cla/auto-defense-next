@@ -35,8 +35,7 @@
 | perfect | 完美弹反 / perfect | boolean / false | true 或 false | Live | 开启模组的完美弹反处理；具体策略由 perfect_mode 决定。 / Enables the mod's perfect-deflect handling; behavior is selected by perfect_mode. |
 | perfect_mode | 完美模式 / perfect_mode | string choice / "give" | always、give、window | Restart | always 持续维持完美标记；give 不常驻标记，而通过游戏窗口处理普通弹反并仅在特定黑闪/子弹窗口使用标记；window 在检测到近时命中时短暂加标记。window 是保留的实验模式。 / Selects always-on, give-window, or hit-window perfect handling. |
 | black_flash | 黑闪处理 / black_flash | string choice / "dodge" | dodge、parry | Restart | 主要用于 perfect_mode="give"：黑闪走闪避，或以完美标记处理弹反。hook_counter=on 且条件满足时黑光改走反制，不再看本项。 / In give mode, choose to dodge a black flash or handle it with the perfect tag. With hook_counter=on and its conditions met, a black flash is countered instead, and this setting is not consulted. |
-| hook_counter | 别离残钩反制 / hook_counter | string choice / "off" | off、on | Live | 关闭时不改变任何行为。开启后：手持别离残钩（武器名含 DualHook）且杀气不低于 hook_counter_shachi 时，黑光（PowerAttack）判定改为「按住格挡＋三角形」反制，不再按黑闪设置闪避/弹反；条件不满足时仍按 black_flash 处理。 / Off changes nothing. On: with a DualHook weapon in hand and shachi at or above hook_counter_shachi, a black-flash (PowerAttack) check becomes a block-and-triangle counter instead of what black_flash picks; when a condition fails, black_flash still decides. |
-| hook_counter_shachi | 反制杀气阈值（%） / hook_counter_shachi | number / 37 | 0–100，步进 1（%） | Live | 仅 hook_counter=on 时读取；杀气低于该值的黑光仍按 black_flash 处理。 / Read only while hook_counter is on; a black flash below it still follows black_flash. |
+| hook_counter | 别离残钩反制 / hook_counter | string choice / "off" | off、on | Live | 关闭时不改变任何行为。开启后：手持别离残钩（武器名含 DualHook）时，每一次命中都改为「按住格挡＋三角形」反制，不再按 black_flash/parry 处理；手里不是这把武器时仍走原链路。 / Off changes nothing. On: with a DualHook weapon in hand, every hit becomes the block-and-triangle counter instead of what black_flash/parry picks; any other weapon keeps the old chain. |
 | shield_counter | 蓝色护盾反制 / shield_counter | string choice / "off" | off、on | Live | 测试中；关闭时不扫描、不换武器，行为与之前完全一致。开启后：shield_counter_range 内有带蓝色护盾（AttributeSetBase.Shield > 0）的敌人时，自动切到别离残钩并对它的可格挡攻击放反制；附近有这种敌人时不会把别离残钩切走。 / Experimental; off scans nothing and switches nothing. On: a blue-shielded enemy (AttributeSetBase.Shield > 0) within shield_counter_range makes the mod switch to the DualHook, counter that enemy's blockable attacks, and keep the hook in hand while such an enemy is near. |
 | shield_counter_range | 蓝盾扫描距离（公分） / shield_counter_range | number / 1500 | 0–3000，步进 50 cm | Live | 仅 shield_counter=on 时读取；热改后下一次扫描即用新半径。 / Read only while shield_counter is on; a hot change applies to the next scan. |
 | dodge | 闪避模式 / dodge | string choice / "red" | off、red、all | Restart* | off 关闭自动闪避；red 处理红色不可弹反命中；all 扩展到正常/可弹反命中。特定实验攻击与黑闪仍有专门分支。 / Disables dodging, dodges red hits, or broadens dodge handling to all queried hit kinds. |
@@ -192,7 +191,7 @@ menu_config.toggle 会先重新读取最新 JSON，只修改 perfect、parry 或
 
 - JSON 优先级高于 TXT；即使 TXT 中某个值不同，也会由 JSON 覆盖。
 - JSON 缺少某个已知字段时，该字段在内存中补 schema 默认值。
-- 1.6.6 之前的 JSON 不含 hook_counter / hook_counter_shachi / shield_counter / shield_counter_range：这四项按 schema 默认值补齐（off / 37 / off / 1500），所以升级后行为与 1.6.6 完全一致，无需手工迁移；下次菜单或热键保存时它们才写进文件。
+- 1.6.6 之前的 JSON 不含 hook_counter / shield_counter / shield_counter_range：这三项按 schema 默认值补齐（off / off / 1500）；`hook_counter_shachi` 已在 1.6.11 前移除，旧文件里的该键会被静默忽略，所以升级后行为与 1.6.6 完全一致，无需手工迁移；下次菜单或热键保存时它们才写进文件。
 - 未知扁平字段保留并记录一次 warning。
 - 错误 JSON、类型错误、范围错误或跨字段不变量失败时，拒绝整份新配置并保留最后有效运行态；不会偷偷用 TXT 覆盖一个已经存在但损坏的 JSON。
 - 运行中修复 JSON 后，下一次轮询可重新加载；Restart 字段仍只会在下次游戏启动时应用。

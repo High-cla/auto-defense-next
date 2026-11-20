@@ -222,7 +222,7 @@ local settings = { perfect = false, perfectMode = "give", blackFlash = "dodge", 
     -- while the weapon is in hand and Sha-chi is high enough) and the blue-shield
     -- counter (bring the weapon out when a shielded enemy is near, counter its
     -- blockable hits). Both off: an install that enables nothing runs 1.6.6.
-    hookCounter = "off", hookCounterShachi = 37, shieldCounter = "off", shieldCounterRange = 1500,
+    hookCounter = "off", shieldCounter = "off", shieldCounterRange = 1500,
     -- 1.4.4, from PBZAssist 1.3.3: min_gap_ms between two deflect presses, the
     -- grab's own lead, dodging again while the last dodge still runs (dodge_cd),
     -- pressing into an action lock (busy_skip), holding the guard through a
@@ -313,8 +313,6 @@ do
             if k == "seed_fallback" and (v == "off" or v == "record" or v == "on") then settings.seedFallback = v end
             if k == "hook_counter" and (v == "off" or v == "on") then settings.hookCounter = v end
             if k == "shield_counter" and (v == "off" or v == "on") then settings.shieldCounter = v end
-            local hs = line:match("^%s*hook_counter_shachi%s*=%s*([%d%.]+)")
-            if hs and tonumber(hs) then settings.hookCounterShachi = tonumber(hs) end
             local sr = line:match("^%s*shield_counter_range%s*=%s*([%d%.]+)")
             if sr and tonumber(sr) then settings.shieldCounterRange = tonumber(sr) end
             if k == "data_off" then
@@ -413,11 +411,10 @@ local function saveSettings()
     f:write("data_tags = " .. (settings.dataTags and "on" or "off") .. "\n")
     f:write("# seed_fallback: off, record (log exact matches only), or on (dodge from reference no-frame seeds)\n")
     f:write("seed_fallback = " .. (settings.seedFallback or "record") .. "\n")
-    f:write("# hook_counter: on = with 别离残钩 (DualHook) in hand and Sha-chi at hook_counter_shachi % of\n")
-    f:write("# its maximum, a black flash is answered with the counter (hold guard + Triangle) instead of\n")
-    f:write("# the dodge. Nothing is pressed with any other weapon, and off leaves the chain untouched\n")
+    f:write("# hook_counter: on = with 别离残钩 (DualHook) in hand every hit is answered with the counter\n")
+    f:write("# (hold guard + Triangle) instead of the dodge. Nothing is pressed with any other weapon,\n")
+    f:write("# and off leaves the chain untouched\n")
     f:write("hook_counter = " .. (settings.hookCounter or "off") .. "\n")
-    f:write(string.format("hook_counter_shachi = %.0f\n", tonumber(settings.hookCounterShachi) or 37))
     f:write("# shield_counter (being tested): on = an enemy with a blue shield inside shield_counter_range\n")
     f:write("# centimetres makes the mod bring 别离残钩 out and counter that enemy's blockable hits\n")
     f:write("shield_counter = " .. (settings.shieldCounter or "off") .. "\n")
@@ -1045,8 +1042,8 @@ tl.installCounter = function()
         return nil, nil
     end
     tl.weapon, tl.counter = weapon, counter
-    log("counter: ready (hook %s, Sha-chi %s%%, blue shield %s within %s cm)", tostring(settings.hookCounter),
-        tostring(settings.hookCounterShachi), tostring(settings.shieldCounter), tostring(settings.shieldCounterRange))
+    log("counter: ready (hook %s, blue shield %s within %s cm)", tostring(settings.hookCounter),
+        tostring(settings.shieldCounter), tostring(settings.shieldCounterRange))
     return weapon, counter
 end
 -- a grab (GA_*_GEx*: grab, then the execution) cannot be parried; its frame
@@ -2316,9 +2313,11 @@ do
     tl.counterShieldOf = blueShield
     -- which counter, if any, this timeline row asks for
     tl.counterKind = function(h)
-        -- a black flash belongs to the hook counter or to no counter at all: the
-        -- blue-shield counter answers the blockable hits of a shielded enemy
-        if h.t == "4" then return settings.hookCounter == "on" and "black" or nil end
+        -- the hook counter answers every hit while it is on (2026-11-21: the black
+        -- flash type gate and the shachi threshold never matched in a real session, so
+        -- a counter key that needed them never fired); the blue-shield counter takes
+        -- the blockable hits of a shielded enemy when the hook counter is off
+        if settings.hookCounter == "on" then return "black" end
         if settings.shieldCounter == "on" and not h[3] then return "shield" end
         return nil
     end
@@ -2337,7 +2336,6 @@ do
         local action = tl.counterAction()
         local verdict = C:offer(kind, hitAt, hitAt - now, {
             held = W:held(now),
-            shachiOk = W:enough(tonumber(settings.hookCounterShachi) or 37, now),
             action = action ~= nil,
         })
         if verdict == "press" then
