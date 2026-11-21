@@ -557,7 +557,7 @@ local tl = { BLACK_LEAD = 0.5, GIVE_RELEASE = 0.6, BULLET_HOLD = 1.2, TORNADO_MO
 -- traceback the first time it is seen, so a broken hook is visible with debug = off
 -- (until 1.6.2 those three went to attackLog, which returns at once unless DEBUG).
 do
-    tl.VERSION = "1.6.12"
+    tl.VERSION = "1.6.13"
     tl.errs = {}
     function tl.err(what, err)
         local n = (tl.errs[what] or 0) + 1
@@ -2041,15 +2041,46 @@ tl.MISS_RETRY, tl.actionMiss = 60, {}
 tl.SEARCH_MAX = 10
 tl.searchWait = function(n) return n >= tl.SEARCH_MAX and 1e9 or math.min(60, 2 ^ n) end
 local actions = {}
+-- Attack actions are not under the deflect folder: IA_AttackH_Press lives at
+-- /PBZInput/InputActions/IA_AttackH_Press, so the one fixed prefix never found
+-- the counter's press (2026-11-21 session: "counter: no Triangle input action
+-- resolved" while the dump listed every candidate in the object table). The
+-- known folders are asked in turn, then the object table by short name.
+local ACTION_DIRS = { "/PBZDeflectSystem/Input/", "/PBZInput/InputActions/",
+    "/PBZInput/InputActions/OldInputActions/" }
+local actionIndex = nil
+local function indexedAction(n)
+    if not actionIndex then
+        local map, count = {}, 0
+        local ok, all = pcall(FindAllOf, "InputAction")
+        if ok and type(all) == "table" then
+            for _, a in pairs(all) do
+                local okN, name = pcall(function() return a:GetFName():ToString() end)
+                if okN and type(name) == "string" then
+                    count = count + 1
+                    if map[name] == nil then map[name] = a end
+                end
+            end
+        end
+        if count == 0 then return nil end -- the assets were not there yet: ask again
+        actionIndex = map
+        log("input actions: %d indexed by name", count)
+    end
+    return actionIndex[n]
+end
 local function inputAction(n)
     local a = actions[n]
     if valid(a) then return a end
-    a = obj("/PBZDeflectSystem/Input/" .. n .. "." .. n)
-    if not a and os.clock() >= (tl.actionMiss[n] or 0) then
+    for _, dir in ipairs(ACTION_DIRS) do
+        a = obj(dir .. n .. "." .. n)
+        if valid(a) then break end
+    end
+    if not valid(a) then a = indexedAction(n) end
+    if not valid(a) and os.clock() >= (tl.actionMiss[n] or 0) then
         local ok, found = pcall(FindObject, "InputAction", nil, n, false)
         if ok and valid(found) then a = found else tl.actionMiss[n] = os.clock() + tl.MISS_RETRY end
     end
-    if a then
+    if valid(a) then
         actions[n] = a
         log("input action %s: %s", n, a:GetFullName())
     end
@@ -2203,7 +2234,10 @@ do
         end
         once("noact", "counter: no Triangle input action resolved (%s)",
             table.concat(tl.COUNTER_ACTIONS, ", "))
-        pcall(tl.listInputActions)
+        if not tl.inputListed then -- the dump is 60 lines: once a session, not every retry
+            tl.inputListed = true
+            pcall(tl.listInputActions)
+        end
         return nil
     end
     -- the main weapon in hand and the one a weapon switch brings out (backpack
@@ -2357,8 +2391,17 @@ do
             if not dist or dist > (tonumber(settings.shieldCounterRange) or 1500) then return nil end
         end
         local action = tl.counterAction()
+        local held = W:held(now)
+        if not held and not tl.heldSaid and tl.weaponNow then
+            -- a resolved press that never fires is most often the weapon name:
+            -- say what is in hand once so the next session answers it
+            tl.heldSaid = true
+            local w = tl.weaponNow()
+            log("counter: the press is ready (%s), the weapon in hand is %s (the counter needs a name with DualHook)",
+                tostring(action and action:GetFullName() or "-"), tostring(w and w.current or "-"))
+        end
         local verdict = C:offer(kind, hitAt, hitAt - now, {
-            held = W:held(now),
+            held = held,
             action = action ~= nil,
         })
         if verdict == "press" then

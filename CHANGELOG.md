@@ -2,6 +2,23 @@
 
 Versions are the `tl.VERSION` value in `Scripts/main.lua`; the release tag is `v<version>`.
 
+## 1.6.13 — 2026-11-21
+
+### 修复：反制按键的查找路径（反制从未触发的真正原因）
+
+- `inputAction()` 只按 `/PBZDeflectSystem/Input/<n>.<n>` 一个前缀找对象。1.6.12 实机会话（33 分钟、104,102 ticks）里 `input actions: 95 found` 明确列出 `/PBZInput/InputActions/IA_AttackH_Press`，日志却仍旧每 5 秒报一次 `counter: no Triangle input action resolved` —— 候选名全对，路径全错。现在按 `/PBZDeflectSystem/Input/`、`/PBZInput/InputActions/`、`/PBZInput/InputActions/OldInputActions/` 依次查找，仍未命中则退回 `FindAllOf("InputAction")` 建立的短名索引（一次性建表并记 `input actions: %d indexed by name`），`FindObject` 只作最后兜底。
+- 95 个输入动作的清单改为每局只打一次：1.6.12 会话里它每次重试都刷 61 行，28 次共约 1700 行，占整份日志 2332 行的 73%。
+- 新增一次性诊断：反制按键已解析、但手上武器名不含 `DualHook` 时，把真实武器名写进日志（`counter: the press is ready (...), the weapon in hand is ...`），下一个悬而未决的判定由此可查。
+
+### 实机结论保留
+
+- 1.6.12 会话 `hit taken: stun` 为 0（1.6.11 为 105），按键注入 `: true` 60 次对 `: false` 60 次（1.6.11 为 1 对 300），证明 `inject = injectKey` 的 P0 修复成立。
+- 同会话 `frames: hook=0 notime=0 added=0` 全程为 0：钩子 08:22:51 才挂上，之后玩家一次都没被命中，帧模型本局未被触发，仍待有挨打的会话验证。
+
+### 文档
+
+- `docs/MODULES.md`、`README.md` 里的 `Scripts/main.lua` 行数同步到 5928。
+
 ## 1.6.12 — 2026-11-21
 
 ### 修复：闪避按键从未真正送出（P0）
