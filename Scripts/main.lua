@@ -557,7 +557,7 @@ local tl = { BLACK_LEAD = 0.5, GIVE_RELEASE = 0.6, BULLET_HOLD = 1.2, TORNADO_MO
 -- traceback the first time it is seen, so a broken hook is visible with debug = off
 -- (until 1.6.2 those three went to attackLog, which returns at once unless DEBUG).
 do
-    tl.VERSION = "1.6.13"
+    tl.VERSION = "1.6.14"
     tl.errs = {}
     function tl.err(what, err)
         local n = (tl.errs[what] or 0) + 1
@@ -2046,36 +2046,41 @@ local actions = {}
 -- the counter's press (2026-11-21 session: "counter: no Triangle input action
 -- resolved" while the dump listed every candidate in the object table). The
 -- known folders are asked in turn, then the object table by short name.
-local ACTION_DIRS = { "/PBZDeflectSystem/Input/", "/PBZInput/InputActions/",
+-- the chunk is at its 200-local ceiling and Lua 5.4 counts every local ever
+-- declared in a function (a do-block does not give the slot back), so the list
+-- and the index are fields: adding three locals here stopped the mod from
+-- loading at all ("too many local variables ... in main function near 'in'")
+tl.ACTION_DIRS = { "/PBZDeflectSystem/Input/", "/PBZInput/InputActions/",
     "/PBZInput/InputActions/OldInputActions/" }
-local actionIndex = nil
-local function indexedAction(n)
-    if not actionIndex then
-        local map, count = {}, 0
-        local ok, all = pcall(FindAllOf, "InputAction")
-        if ok and type(all) == "table" then
-            for _, a in pairs(all) do
-                local okN, name = pcall(function() return a:GetFName():ToString() end)
-                if okN and type(name) == "string" then
-                    count = count + 1
-                    if map[name] == nil then map[name] = a end
-                end
-            end
-        end
-        if count == 0 then return nil end -- the assets were not there yet: ask again
-        actionIndex = map
-        log("input actions: %d indexed by name", count)
-    end
-    return actionIndex[n]
-end
 local function inputAction(n)
     local a = actions[n]
     if valid(a) then return a end
-    for _, dir in ipairs(ACTION_DIRS) do
-        a = obj(dir .. n .. "." .. n)
+    for i = 1, #tl.ACTION_DIRS do
+        a = obj(tl.ACTION_DIRS[i] .. n .. "." .. n)
         if valid(a) then break end
     end
-    if not valid(a) then a = indexedAction(n) end
+    if not valid(a) then
+        local idx = tl.actionIndex
+        if not idx then -- one pass over the object table, then short-name lookups
+            local okAll, all, count, map = nil, nil, 0, {}
+            okAll, all = pcall(FindAllOf, "InputAction")
+            if okAll and type(all) == "table" then
+                for _, o in pairs(all) do
+                    local okN, name = pcall(function() return o:GetFName():ToString() end)
+                    if okN and type(name) == "string" then
+                        count = count + 1
+                        if map[name] == nil then map[name] = o end
+                    end
+                end
+            end
+            if count > 0 then
+                tl.actionIndex = map
+                log("input actions: %d indexed by name", count)
+            end
+            idx = tl.actionIndex
+        end
+        if idx then a = idx[n] end
+    end
     if not valid(a) and os.clock() >= (tl.actionMiss[n] or 0) then
         local ok, found = pcall(FindObject, "InputAction", nil, n, false)
         if ok and valid(found) then a = found else tl.actionMiss[n] = os.clock() + tl.MISS_RETRY end
@@ -2391,8 +2396,7 @@ do
             if not dist or dist > (tonumber(settings.shieldCounterRange) or 1500) then return nil end
         end
         local action = tl.counterAction()
-        local held = W:held(now)
-        if not held and not tl.heldSaid and tl.weaponNow then
+        if not tl.heldSaid and not W:held(now) and tl.weaponNow then
             -- a resolved press that never fires is most often the weapon name:
             -- say what is in hand once so the next session answers it
             tl.heldSaid = true
@@ -2401,7 +2405,7 @@ do
                 tostring(action and action:GetFullName() or "-"), tostring(w and w.current or "-"))
         end
         local verdict = C:offer(kind, hitAt, hitAt - now, {
-            held = held,
+            held = W:held(now),
             action = action ~= nil,
         })
         if verdict == "press" then

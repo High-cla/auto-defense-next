@@ -2,7 +2,25 @@
 
 Versions are the `tl.VERSION` value in `Scripts/main.lua`; the release tag is `v<version>`.
 
+## 1.6.14 — 2026-11-21
+
+### 修复：1.6.13 根本无法加载（主 chunk 超过 Lua 5.4 的 200 局部上限）
+
+- 1.6.13 在 `inputAction` 旁边新增了三个 chunk 级局部变量（`ACTION_DIRS`、`actionIndex`、`indexedAction`），把主 chunk 推过 Lua 5.4 的 200 局部上限，模组一个字节都没跑起来。UE4SS 原文（`ue4ss/UE4SS.log` 09:08:02）：`Error loading script: …Scripts\main.lua:5903: too many local variables (limit is 200) in main function near 'in'`，随后 `Failed to execute main script`。
+- **关键教训**：Lua 5.4 的 200 上限统计的是「该函数内声明过的全部局部变量」（`lparser.c` 的 `actvar.n`），`do ... end` 结束时**不归还**名额；LuaJIT 按活跃槽位统计，所以 `luajit -e 'assert(loadfile(...))'` 一路通过，实机 Lua 5.4 直接失败。这两样现在改为 `tl.ACTION_DIRS` 与 `tl.actionIndex` 字段，主 chunk 的局部变量数回到 1.6.12 的水平。
+- 门禁补强：本机用 clang 编译了 Lua 5.4.7（`C:/Users/11/.dsh/tools/lua54/lua54.exe`，已加入 `~/.bashrc` 的 PATH），`tools/run_all.sh` 的编译冒烟从「NOT INSTALLED，跳过」变成真编译 17 个文件；同一个检查器打开 1.6.13 的 `main.lua` 时报出的错误与实机一字不差，所以这类故障不会再静默发版。
+- v1.6.13 的 Release 与 tag 已删除（它无法加载）。
+
+### 保留的 1.6.13 修复内容
+
+- `inputAction()` 现在按 `/PBZDeflectSystem/Input/`、`/PBZInput/InputActions/`、`/PBZInput/InputActions/OldInputActions/` 三个目录依次查找，再退回 `FindAllOf("InputAction")` 的短名索引（`input actions: %d indexed by name`），`FindObject` 只作最后兜底。1.6.12 的日志同时出现 `input actions: 95 found` 与 `counter: no Triangle input action resolved`，原因就是攻击类输入动作不在 deflect 目录下。
+- 95 个输入动作的清单改为每局只打一次（1.6.12 会话里 28 次共约 1700 行，占整份日志 73%）。
+- 反制按键已解析但手上武器名不含 `DualHook` 时，打一行手持武器名。
+
 ## 1.6.13 — 2026-11-21
+
+> ⚠️ 此版**无法加载**：主 chunk 超过 Lua 5.4 的 200 局部上限，模组不会启动。已被 1.6.14 取代，Release 与 tag 已删除。
+
 
 ### 修复：反制按键的查找路径（反制从未触发的真正原因）
 
