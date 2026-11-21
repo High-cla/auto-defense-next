@@ -2308,6 +2308,47 @@ do
         cache = out
         return out
     end
+    -- One shot: "the weapon in hand is -" on a real session (2026-11-21 10:35) means
+    -- the reader returned nothing while the character clearly held the hook, so the
+    -- counter never armed. This prints what the backpack actually holds, and the
+    -- plausible weapon fields on both the subsystem and the pawn.
+    tl.weaponProbe = function()
+        local bp = backpack()
+        log("weapon probe: backpack=%s", bp and tostring(brief(bp)) or "nil")
+        local fields = { "Weapon", "CurrentWeapon", "EquippedWeapon", "MainWeapon",
+            "WeaponID", "CurrentWeaponID", "WeaponName" }
+        local function dump(where, o)
+            if not o then return end
+            for i = 1, #fields do
+                local name = fields[i]
+                local okv, v = pcall(function() return o[name] end)
+                if okv and v ~= nil then
+                    log("weapon probe: %s.%s = %s", where, name, tostring(textOf(v) or v))
+                end
+            end
+        end
+        dump("pawn", currentPawn)
+        dump("bag", bp)
+        if not bp then return end
+        local okList, list = pcall(function() return bp.MainWeapons end)
+        log("weapon probe: MainWeapons ok=%s type=%s", tostring(okList), type(list))
+        local len = 0
+        if okList and list ~= nil then
+            local okn, nn = pcall(function() return #list end)
+            len = (okn and tonumber(nn)) or 0
+            log("weapon probe: #MainWeapons=%s", tostring(okn and nn or "error"))
+            for i = 1, math.min(len, 8) do
+                log("weapon probe: [%d] %s", i, tostring(textOf(list[i])))
+            end
+            if len == 0 then
+                pcall(function() list:ForEach(function(_, v) log("weapon probe: forEach %s", tostring(textOf(v))) end) end)
+            end
+        end
+        local okIdx, idx = pcall(function() return bp.CurrentWeaponIndex end)
+        log("weapon probe: CurrentWeaponIndex ok=%s value=%s", tostring(okIdx), tostring(okIdx and idx or "-"))
+        local okId, id = pcall(function() return bp.CurrentMainWeaponID end)
+        log("weapon probe: CurrentMainWeaponID ok=%s value=%s", tostring(okId), tostring(okId and textOf(id) or "-"))
+    end
     -- enemies that announced an attack in the last 20 s: the blue-shield scan needs
     -- nobody else, and this mod enumerates no actors (FindAllOf stays out of ticks)
     do
@@ -2403,6 +2444,7 @@ do
             local w = tl.weaponNow()
             log("counter: the press is ready (%s), the weapon in hand is %s (the counter needs a name with DualHook)",
                 tostring(action and action:GetFullName() or "-"), tostring(w and w.current or "-"))
+            if tl.weaponProbe then pcall(tl.weaponProbe) end
         end
         local verdict = C:offer(kind, hitAt, hitAt - now, {
             held = W:held(now),

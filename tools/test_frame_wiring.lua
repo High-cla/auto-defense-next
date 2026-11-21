@@ -57,6 +57,7 @@ has('tl.ACTION_DIRS = { "/PBZDeflectSystem/Input/", "/PBZInput/InputActions/",',
 has("if idx then a = idx[n] end", "and in the object table by short name")
 has('log("input actions: %d indexed by name", count)', "the short-name index says how big it is")
 hasnt("local function indexedAction", "the helper is inline: Lua 5.4 counts every local a chunk ever declares")
+has("weapon probe: backpack=%s", "a counter that never arms prints what the backpack holds")
 has("if not tl.inputListed then", "the 60-line action dump is written once a session")
 has("the counter needs a name with DualHook", "a resolved press that never fires names the weapon in hand")
 hasnt("local RELEASE_FROM_OUTSIDE = false", "the dormant guard-release path stays deleted")
