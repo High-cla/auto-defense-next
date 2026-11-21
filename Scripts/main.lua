@@ -557,7 +557,7 @@ local tl = { BLACK_LEAD = 0.5, GIVE_RELEASE = 0.6, BULLET_HOLD = 1.2, TORNADO_MO
 -- traceback the first time it is seen, so a broken hook is visible with debug = off
 -- (until 1.6.2 those three went to attackLog, which returns at once unless DEBUG).
 do
-    tl.VERSION = "1.6.15"
+    tl.VERSION = "1.6.16"
     tl.errs = {}
     function tl.err(what, err)
         local n = (tl.errs[what] or 0) + 1
@@ -4438,7 +4438,14 @@ do
             and os.clock() - math.max(lastTapAt or 0, tl.keyDownAt) >= tl.GIVE_RELEASE
             and not hitComing(deflect, 0.3) then
             local ps = deflectPassive(pawn)
-            if ps and keyDown(ps) then
+            local pressed = math.max(lastTapAt or 0, tl.keyDownAt or 0)
+            -- 1.6.16: one release per press. The passive latches Stance Key Down
+            -- until the next tap (probe 2026-11-03), so "the key is down and the
+            -- last press is old" stays true for the rest of the fight: asking
+            -- every tick wrote 14,829 release calls in 7.7 min (12:24 session)
+            -- and the guard flickered up and down in view. Ask once, then stop.
+            if ps and keyDown(ps) and tl.giveReleasedFor ~= pressed then
+                tl.giveReleasedFor = pressed
                 releaseFrom = nil
                 release(pawn, "give: press over")
                 return
@@ -4478,8 +4485,14 @@ do
             -- lastTapAt: lastTap is cleared every tick by releaseHeldGuard
             and not (lastTapAt and os.clock() - lastTapAt < SPRINT_QUIET)
             and not hitComing(deflect, SPRINT_QUIET) then
-            releaseFrom = nil
-            release(pawn, "sprint held")
+            -- 1.6.16: once per sprint hold, not once per tick: holding the run
+            -- key kept this condition true on every frame and the same release
+            -- went out ~30 times a second.
+            if tl.sprintReleasedFor ~= sprintDownAt then
+                tl.sprintReleasedFor = sprintDownAt
+                releaseFrom = nil
+                release(pawn, "sprint held")
+            end
         end
     end
 end

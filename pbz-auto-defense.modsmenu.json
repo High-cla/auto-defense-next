@@ -7,7 +7,7 @@
     "en": "Lua defense runtime with native Mods Menu config. Restart-only fields are marked. Free-text fields are read-only.",
     "zh-Hans": "保留 Lua 防守运行时，接入原生模组菜单配置。重启项已标注；两个自由文本项只读。"
   },
-  "version": "1.6.15",
+  "version": "1.6.16",
   "settings": [
     {
       "key": "perfect",

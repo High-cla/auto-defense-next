@@ -2,6 +2,15 @@
 
 Versions are the `tl.VERSION` value in `Scripts/main.lua`; the release tag is `v<version>`.
 
+## 1.6.16 — 2026-11-21
+
+### 修复：give 模式下防守键每帧被松一次（玩家看到「一直在连按防守」）
+
+- 症状：12:24 那一局的 `attacks_log.txt` 在 7.7 分钟里写了 **14,829 行** `-> guard release (give: press over): ok`，约 32 次/秒，从头到尾没停；游戏里表现为防守动作持续闪动。
+- 根因：`perfect_mode = give` 的松开条件是「架势键仍按下 且 距上次按压已过 `GIVE_RELEASE`」，而对手被动在每次注入按压后会把 `Stance Key Down` **锁到下一次按击**（2026-11-03 探针），于是该条件整场战斗恒为真；`release()` 调 `On Stance Key Release` 拿到 ok 但标志位不回零，下一帧又满足 → 每帧一次释放。`rlog` 每局上限 20 行，所以 `auto_defense_log.txt` 只有 15 行，看不出问题；`debug=on` 打开后的 `attacks_log.txt` 才把它暴露出来。
+- 修复：give 模式的释放改为**每次按击一次**（`tl.giveReleasedFor` 记住 `max(lastTapAt, tl.keyDownAt)`）；`sprint held` 分支同样改为**每次按住一次**（`tl.sprintReleasedFor` 记住 `sprintDownAt`），按住跑动键不再每帧发释放。
+- 新增 `tools/test_guardrelease.lua`（9 条断言，静态核对两处一次性守卫与释放点唯一性），已注册进 `tools/run_all.sh` 与 `tools/assertions.min`。
+
 ## 1.6.15 — 2026-11-21
 
 ### 修复：1.6.12 起，每局第一次见到敌方攻击帧就把游戏崩掉
