@@ -2262,13 +2262,27 @@ do
     -- The backpack keeps weapon IDs as plain strings (MainWeapons is a
     -- TArray<string>, CurrentMainWeaponID a string): asking valid() or GetFullName
     -- of them throws, and a throw here used to silence both counter features.
+    -- 2026-11-21 session: the probe found MainWeapons to be a TArray of 2 elements
+    -- whose entries read as nil, and CurrentMainWeaponID printed as an FName
+    -- userdata: GetFullName() is not how an FString/FName is read here, so every
+    -- accessor is tried and the userdata debug spellings are rejected.
     local function textOf(v)
-        if type(v) == "string" then return v end
+        if type(v) == "string" then return v ~= "" and v or nil end
         if v == nil or type(v) == "number" or type(v) == "boolean" then return nil end
-        local ok, s = pcall(function() return v:GetFullName() end)
-        if ok and type(s) == "string" then return s end
-        local okg, raw = pcall(function() return v:get() end)
-        return okg and type(raw) == "string" and raw or nil
+        local tries = {
+            function() return v:get() end,
+            function() return v:ToString() end,
+            function() return v:GetFullName() end,
+            function() return tostring(v) end,
+        }
+        for i = 1, #tries do
+            local ok, s = pcall(tries[i])
+            if ok and type(s) == "string" and s ~= ""
+                and not s:match("^%a+[Uu]serdata:") and not s:match("^%a+[Oo]bject:") then
+                return s
+            end
+        end
+        return nil
     end
     -- the same weapon may be named by its class or by its display name; the module
     -- matches one substring, so both spellings are normalized to it
@@ -2291,18 +2305,29 @@ do
                     len = okn and tonumber(len) or nil
                     if len and len > 0 then
                         n = len
-                        for i = 1, n do names[i] = textOf(list[i]) end
+                        for i = 1, n do
+                            local one = list[i]
+                            if one == nil then -- TArray also answers Get(index)
+                                local okg, g = pcall(function() return list:Get(i) end)
+                                one = okg and g or nil
+                            end
+                            names[i] = textOf(one)
+                        end
                     else
                         pcall(function() list:ForEach(function(_, v) names[#names + 1] = textOf(v) end) end)
                         n = #names
                     end
                 end
                 local idx = tonumber(bp.CurrentWeaponIndex)
-                local cur = idx and names[idx + 1] or nil
-                cur = hookName(cur or textOf(bp.CurrentMainWeaponID))
+                -- the ID is the authoritative answer; the array is asked with both
+                -- index conventions because CurrentWeaponIndex was 1 with two weapons
+                local cur = textOf(bp.CurrentMainWeaponID)
                 local nxt = nil
-                if idx and n > 1 then nxt = hookName(names[(idx + 1) % n + 1]) end
-                out = { current = cur, next = nxt }
+                if idx then
+                    cur = cur or names[idx + 1] or names[idx]
+                    if n > 1 then nxt = names[(idx + 1) % n + 1] end
+                end
+                out = { current = hookName(cur), next = hookName(nxt), names = names, id = textOf(bp.CurrentMainWeaponID) }
             end)
         end
         cache = out
@@ -2314,40 +2339,49 @@ do
     -- plausible weapon fields on both the subsystem and the pawn.
     tl.weaponProbe = function()
         local bp = backpack()
-        log("weapon probe: backpack=%s", bp and tostring(brief(bp)) or "nil")
-        local fields = { "Weapon", "CurrentWeapon", "EquippedWeapon", "MainWeapon",
-            "WeaponID", "CurrentWeaponID", "WeaponName" }
-        local function dump(where, o)
-            if not o then return end
-            for i = 1, #fields do
-                local name = fields[i]
-                local okv, v = pcall(function() return o[name] end)
-                if okv and v ~= nil then
-                    log("weapon probe: %s.%s = %s", where, name, tostring(textOf(v) or v))
-                end
-            end
-        end
-        dump("pawn", currentPawn)
-        dump("bag", bp)
+        log("weapon probe: backpack=%s", bp and "found" or "nil")
         if not bp then return end
-        local okList, list = pcall(function() return bp.MainWeapons end)
-        log("weapon probe: MainWeapons ok=%s type=%s", tostring(okList), type(list))
-        local len = 0
-        if okList and list ~= nil then
-            local okn, nn = pcall(function() return #list end)
-            len = (okn and tonumber(nn)) or 0
-            log("weapon probe: #MainWeapons=%s", tostring(okn and nn or "error"))
-            for i = 1, math.min(len, 8) do
-                log("weapon probe: [%d] %s", i, tostring(textOf(list[i])))
+        -- every accessor a userdata may answer with, side by side: the first probe
+        -- only used GetFullName and get(), so it could not tell which one works
+        local function show(tag, thunk)
+            local ok, v = pcall(thunk)
+            if not ok then log("weapon probe: %s ERROR %s", tag, tostring(v)) return end
+            if v == nil then log("weapon probe: %s nil", tag) return end
+            local bits = { type(v) }
+            local names = { { "get", function() return v:get() end },
+                { "ToStr", function() return v:ToString() end },
+                { "Full", function() return v:GetFullName() end } }
+            for i = 1, #names do
+                local oks, s = pcall(names[i][2])
+                bits[#bits + 1] = names[i][1] .. "=" .. (oks and tostring(s) or "ERR")
             end
-            if len == 0 then
-                pcall(function() list:ForEach(function(_, v) log("weapon probe: forEach %s", tostring(textOf(v))) end) end)
-            end
+            bits[#bits + 1] = "tos=" .. tostring(v)
+            log("weapon probe: %s -> %s", tag, table.concat(bits, " | "))
         end
-        local okIdx, idx = pcall(function() return bp.CurrentWeaponIndex end)
-        log("weapon probe: CurrentWeaponIndex ok=%s value=%s", tostring(okIdx), tostring(okIdx and idx or "-"))
-        local okId, id = pcall(function() return bp.CurrentMainWeaponID end)
-        log("weapon probe: CurrentMainWeaponID ok=%s value=%s", tostring(okId), tostring(okId and textOf(id) or "-"))
+        local okL, list = pcall(function() return bp.MainWeapons end)
+        if not okL then list = nil end
+        log("weapon probe: MainWeapons type=%s len=%s", type(list), tostring(list and #list or "-"))
+        if list ~= nil then
+            for i = 1, 3 do
+                show("MainWeapons[" .. i .. "]", function() return list[i] end)
+                show("MainWeapons:Get(" .. i .. ")", function() return list:Get(i) end)
+            end
+            pcall(function()
+                list:ForEach(function(i, v) log("weapon probe: ForEach[%s] %s", tostring(i), tostring(v)) end)
+            end)
+        end
+        show("CurrentMainWeaponID", function() return bp.CurrentMainWeaponID end)
+        show("CurrentWeaponIndex", function() return bp.CurrentWeaponIndex end)
+        local okC, cls = pcall(function() return bp:GetClass() end)
+        if okC and cls then
+            local seen = 0
+            pcall(function()
+                cls:ForEachProperty(function(pr)
+                    seen = seen + 1
+                    if seen <= 30 then log("weapon probe: prop %s", tostring(pr:GetFullName())) end
+                end)
+            end)
+        end
     end
     -- enemies that announced an attack in the last 20 s: the blue-shield scan needs
     -- nobody else, and this mod enumerates no actors (FindAllOf stays out of ticks)
