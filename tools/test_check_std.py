@@ -141,5 +141,47 @@ class CheckTests(unittest.TestCase):
             check_std.check("base: lua51\n", DOC, {})
 
 
+class HazardTests(unittest.TestCase):
+    """The constructs that die inside UE4SS instead of raising a Lua error."""
+
+    def test_an_fname_used_as_an_index_is_reported_with_its_line(self) -> None:
+        code = "local a = 1\nlocal v = act[FName('PreHitPointDuration')]\n"
+        self.assertEqual(
+            check_std.find_hazards({"main.lua": code}),
+            [
+                (
+                    "main.lua",
+                    2,
+                    "FName as table index",
+                    "UE4SS takes the key through Lua::get_string, which does "
+                    "strlen(NULL) when lua_tolstring returns NULL; "
+                    "crash_2026_11_21_11_16_15",
+                )
+            ],
+        )
+
+    def test_a_space_before_the_bracket_is_still_the_same_hazard(self) -> None:
+        found = check_std.find_hazards({"m.lua": "x = t [ FName('a')]\n"})
+        self.assertEqual(len(found), 1)
+
+    def test_an_fname_as_a_struct_value_is_fine(self) -> None:
+        code = "ctrl:IsInputKeyDown({ KeyName = FName(k) })\n"
+        self.assertEqual(check_std.find_hazards({"m.lua": code}), [])
+
+    def test_a_hazard_named_in_a_comment_or_string_is_ignored(self) -> None:
+        code = (
+            "-- never act[FName('x')]: it crashes\n"
+            "log('act[FName(\"x\")] crashes')"
+        )
+        self.assertEqual(check_std.find_hazards({"m.lua": code}), [])
+
+    def test_every_script_is_scanned_not_just_main(self) -> None:
+        found = check_std.find_hazards({
+            "main.lua": "local ok = true\n",
+            "ad_query.lua": "local n = tagTable[FName('Tag')]\n",
+        })
+        self.assertEqual([(path, line) for path, line, _, _ in found], [("ad_query.lua", 1)])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

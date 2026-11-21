@@ -2,6 +2,16 @@
 
 Versions are the `tl.VERSION` value in `Scripts/main.lua`; the release tag is `v<version>`.
 
+## 1.6.15 — 2026-11-21
+
+### 修复：1.6.12 起，每局第一次见到敌方攻击帧就把游戏崩掉
+
+- 症状：`crash_2026_11_21_11_16_15` 与 `crash_2026_11_21_11_38_49` 两份转储签名完全一致（同 PC、同 RSP/RBP），`0xC0000005` 读地址 `0x0`，出错 PC `ucrtbase.dll+0x2C9F1` 即 `strlen+0x31`；每个进程只在**第一次**遇到敌方 `SendDeflectFrame` 时崩一次，此后不再复现，所以看起来像随机故障。
+- 根因：`frames probe` 诊断行用 `act[FName("PreHitPointDuration")]` 读属性，把 `FName` userdata 当成表索引键。UE4SS 的 `Lua::get_string(int)` 是 `string_view(lua_tolstring(L, idx, NULL))` 之后直接 `strlen`，**没有判 NULL**，于是 `strlen(NULL)` 触发原生访问违例——`pcall` 保护不了原生崩溃，因为异常根本没回到 Lua。
+- 修复：删掉这条探针（`Scripts/main.lua` 原 5175-5182 行，含格式串里的 `fname=%s`），并在原位留下注释说明禁止写法；`prehitOf` 的点号读取是唯一读者，`frames: hook=N notime=M added=K` 这行账本已经能说明属性是否可读。
+- 门禁补强：`tools/check_std.py` 新增 `HAZARDS` 表，扫描全部 `Scripts/*.lua`，命中 `[FName(` 即失败并给出行号（注释与字符串先被抹平，所以解释性注释不会误报）；`tools/check_std.py` 的剥离函数改为保留偏移与行号。附 5 条单测（`tools/test_check_std.py` 共 22 条）。
+- 文档：`docs/UE4SS-LUA-API-REFERENCE.md` 第 8 节新增一条「pcall 只兜 Lua 错误，兜不住原生访问违例」，写明 `FName` 的正确用法。
+
 ## 1.6.14 — 2026-11-21
 
 ### 修复：1.6.13 根本无法加载（主 chunk 超过 Lua 5.4 的 200 局部上限）

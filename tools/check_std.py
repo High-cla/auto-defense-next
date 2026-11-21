@@ -8,7 +8,11 @@ working code fails the linter. This offline check closes that gap: every name
 that docs/UE4SS-LUA-API-REFERENCE.md documents AND Scripts/*.lua reads as a
 global must be declared in ue4ss.yml.
 
-Exit code 0 means aligned, 1 means at least one documented call has no std entry.
+It refuses the habits that kill the process instead of raising a Lua error, too;
+the pattern is decoded by UE4SS in native code where a pcall cannot help.
+
+Exit code 0 means aligned, 1 means at least one documented call has no std entry
+or one hazard is present.
 """
 from __future__ import annotations
 
@@ -35,6 +39,17 @@ DOC_HEADING = re.compile(
 )
 STD_ENTRY = re.compile(r"^ {2}([A-Za-z_][A-Za-z0-9_]*):")
 LONG_BRACKET = re.compile(r"\[(=*)\[")
+
+# Each entry is (rule, pattern, why). These do not raise: they die inside UE4SS,
+# so the gate refuses them in every script rather than at the call site alone.
+HAZARDS: tuple[tuple[str, re.Pattern[str], str], ...] = (
+    (
+        "FName as table index",
+        re.compile(r"\[\s*FName\s*\("),
+        "UE4SS takes the key through Lua::get_string, which does strlen(NULL) "
+        "when lua_tolstring returns NULL; crash_2026_11_21_11_16_15",
+    ),
+)
 
 
 @dataclass(frozen=True)
@@ -103,39 +118,49 @@ def _skip_long_bracket(code: str, opening: re.Match[str]) -> int:
     return len(code) if end < 0 else end + len(closing)
 
 
+def _blank(text: str) -> str:
+    """Spaces in place of text, newlines kept: offsets and line numbers survive."""
+    return "".join("\n" if char == "\n" else " " for char in text)
+
+
 def strip_lua_noise(code: str) -> str:
     """Blank out comments and string literals, keeping the surrounding code.
 
     A name that only appears in a comment, a doc string or a log message is not a
-    global read, so it must not drag an entry into the std.
+    global read, so it must not drag an entry into the std. Removed text becomes
+    spaces of the same width, so a match offset still points at the same byte and
+    a reported line number is the real one.
     """
     out: list[str] = []
     index = 0
     length = len(code)
     while index < length:
         char = code[index]
+        start = index
         if char == "-" and code.startswith("--", index):
             opening = LONG_BRACKET.match(code, index + 2)
             if opening is None:
                 end = code.find("\n", index)
-                index = length if end < 0 else end
-                continue
-            index = _skip_long_bracket(code, opening)
-            out.append(" ")
+                end = length if end < 0 else end
+            else:
+                end = _skip_long_bracket(code, opening)
+            out.append(_blank(code[start:end]))
+            index = end
         elif char == "[":
             opening = LONG_BRACKET.match(code, index)
             if opening is None:
                 out.append(char)
                 index += 1
                 continue
-            index = _skip_long_bracket(code, opening)
-            out.append(" ")
+            end = _skip_long_bracket(code, opening)
+            out.append(_blank(code[start:end]))
+            index = end
         elif char in "\"'":
             index += 1
             while index < length and code[index] != char:
                 index += 2 if code[index] == "\\" else 1
-            index += 1
-            out.append(" ")
+            index = min(index + 1, length)
+            out.append(_blank(code[start:index]))
         else:
             out.append(char)
             index += 1
@@ -157,6 +182,22 @@ def find_global_uses(code: str, names: Iterable[str]) -> set[str]:
     return used
 
 
+def find_hazards(scripts: Mapping[str, str]) -> list[tuple[str, int, str, str]]:
+    """Every (path, line, rule, why) for a construct in HAZARDS.
+
+    Comments and string literals are blanked first, so a hazard may be named in a
+    comment that explains why it is banned without tripping the check.
+    """
+    found: list[tuple[str, int, str, str]] = []
+    for path, code in sorted(scripts.items()):
+        stripped = strip_lua_noise(code)
+        for rule, pattern, why in HAZARDS:
+            for match in pattern.finditer(stripped):
+                line = stripped.count("\n", 0, match.start()) + 1
+                found.append((path, line, rule, why))
+    return found
+
+
 def check(std_text: str, doc_text: str, scripts: Mapping[str, str]) -> Report:
     """Compare the std, the reference and the scripts (see module docstring)."""
     std_names = parse_std_globals(std_text)
@@ -174,17 +215,25 @@ def check(std_text: str, doc_text: str, scripts: Mapping[str, str]) -> Report:
 
 def main() -> int:
     try:
+        scripts = {
+            path.name: path.read_text(encoding="utf-8")
+            for path in sorted(SCRIPTS_DIR.glob("*.lua"))
+        }
+        hazards = find_hazards(scripts)
         report = check(
             STD_PATH.read_text(encoding="utf-8"),
             DOC_PATH.read_text(encoding="utf-8"),
-            {
-                path.name: path.read_text(encoding="utf-8")
-                for path in sorted(SCRIPTS_DIR.glob("*.lua"))
-            },
+            scripts,
         )
     except (OSError, ValueError) as error:
         print(f"FAILED: {error}")
         return 1
+    if hazards:
+        print("FAILED: constructs that crash inside UE4SS, where pcall cannot help:")
+        for path, line, rule, why in hazards:
+            print(f"  {path}:{line}: {rule} - {why}")
+        return 1
+    print(f"OK: no hazard in {len(scripts)} scripts")
     print(
         f"std {len(report.std_names)} globals; reference documents "
         f"{len(report.doc_names)} names, {len(report.usage)} of them read by Scripts/"

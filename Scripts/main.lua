@@ -557,7 +557,7 @@ local tl = { BLACK_LEAD = 0.5, GIVE_RELEASE = 0.6, BULLET_HOLD = 1.2, TORNADO_MO
 -- traceback the first time it is seen, so a broken hook is visible with debug = off
 -- (until 1.6.2 those three went to attackLog, which returns at once unless DEBUG).
 do
-    tl.VERSION = "1.6.14"
+    tl.VERSION = "1.6.15"
     tl.errs = {}
     function tl.err(what, err)
         local n = (tl.errs[what] or 0) + 1
@@ -5162,24 +5162,15 @@ local function onSendFrame(ctx, action, _bullet, _rotation, _, _, strength, dire
     -- 1.6.10: the mod's own record of the frame (see nearest): the hook says when
     -- it was created, the ability says how long until its hit point
     tl.hookSeen = (tl.hookSeen or 0) + 1
-    if not tl.prehitProbe then
-        tl.prehitProbe = true
-        local okC, cls = pcall(function() return act and act:GetClass():GetFName():ToString() end)
-        local function try(loader)
-            local okR, v = pcall(loader)
-            if not okR then return "error(" .. tostring(v):sub(1, 50) .. ")" end
-            local okU, u = pcall(unwrap, v)
-            local got = okU and u or v
-            return string.format("%s<%s>", tostring(got), type(got))
-        end
-        log("frames probe: class=%s prehit dot=%s bracket=%s fname=%s runtime dot=%s bullet dot=%s",
-            okC and tostring(cls) or "?",
-            try(function() return act.PreHitPointDuration end),
-            try(function() return act["PreHitPointDuration"] end),
-            try(function() return act[FName("PreHitPointDuration")] end),
-            try(function() return act.RuntimePreHitPointDuration end),
-            try(function() return act.BulletDuration end))
-    end
+    -- 1.6.15 removed the PreHitPointDuration probe that stood here. It read the
+    -- property with an FName userdata as the __index key, so UE4SS took it through
+    -- Lua::get_string, which does strlen(lua_tolstring(NULL)): the process died on
+    -- the first enemy SendDeflectFrame of every session (crash_2026_11_21_11_16_15
+    -- and _11_38_49, identical PC/RSP/RBP). A pcall cannot catch an access
+    -- violation raised inside native code, so the rule is absolute: an FName is
+    -- never a table index, only a struct field value or a name to ToString().
+    -- prehitOf below is the only reader, and the ledger line
+    -- "frames: hook=N notime=M added=K" already says when it cannot be read.
     if settings.readFrames and settings.frameSource ~= "game" and FRAMES then
         local pre = prehitOf(act)
         if not pre then tl.hookNoTime = (tl.hookNoTime or 0) + 1 end

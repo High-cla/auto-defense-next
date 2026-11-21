@@ -50,7 +50,7 @@ has('dofile(MOD_DIR .. "Scripts/ad_abiinput.lua")', "the counter input dispatche
 has("local ABI = tl.abiInput", "the counter presses through the dispatcher when it is there")
 has("inject = injectKey", "the injection door is bound to the key path")
 has("tl.listInputActions", "a counter with no Triangle action can list what the game has")
-has("frames probe: class=%s prehit dot=%s bracket=%s fname=%s", "one hook call compares the three property reads")
+hasnt('[FName(', "an FName is never a table index: UE4SS dies in get_string, pcall cannot see it")
 has("local PREHIT_GET = {", "the hit time is read through dot access")
 has("shield_counter_range is %s cm", "an unusable shield range says so")
 has('tl.ACTION_DIRS = { "/PBZDeflectSystem/Input/", "/PBZInput/InputActions/",', "the press is searched in both input folders")

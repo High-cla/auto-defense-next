@@ -462,6 +462,7 @@ UE4SS `RegisterKeyBind` 支持：
 
 - 对可能因切图/重生失效的 UObject 调用，要做有效性检查。
 - 对跨版本/可选对象查询使用受控 pcall；错误日志按原因去重/限流。
+- **pcall 只兜 Lua 错误，兜不住原生访问违例**：把 `FName` userdata 当表索引（`act[FName("PreHitPointDuration")]`）时，UE4SS 在 `Lua::get_string` 里执行 `strlen(lua_tolstring(L, idx, NULL))`，对 NULL 求长度直接让进程 AV 退出（`crash_2026_11_21_11_16_15` 与 `_11_38_49`：`0xC0000005` 读 `0x0`，PC `ucrtbase.dll+0x2C9F1` = `strlen+0x31`，调用者 `UE4SS.dll+0xBA4130`）。属性名一律用点号或字符串键读，`FName` 只用作结构体字段值（`{ KeyName = FName(k) }`）或经 `GetFName():ToString()` 转成字符串；`tools/check_std.py` 会拒绝 `[FName(` 这种写法。
 - 日志不要每帧输出；应采用固定上限、缓冲与低频 flush。
 - 每个 Loop/Delayed Action 保存 handle，避免匿名无限循环失控。
 - 每个 RegisterHook 保存 path 与两个 hook id；生命周期结束时按 `UnregisterHook(path, preId, postId)` 反注册，失败的记录要留着重试。
