@@ -2290,6 +2290,23 @@ do
         if type(s) ~= "string" then return s end
         return (s:gsub("別離殘鉤", "DualHook"):gsub("别离残钩", "DualHook"))
     end
+    -- Each slot name is read once and remembered: every read copies engine string
+    -- memory, and the 11:16 session crashed in ucrtbase one second after the first
+    -- counter (2026-11-21 11:16:15), so the reads are kept rare on purpose.
+    tl.weaponNames = {}
+    tl.weaponNameAt = function(list, i)
+        if list == nil or not i or i < 1 then return nil end
+        local known = tl.weaponNames[i]
+        if known ~= nil then return known end
+        local one = list[i]
+        if one == nil then -- TArray also answers Get(index)
+            local okg, g = pcall(function() return list:Get(i) end)
+            one = okg and g or nil
+        end
+        known = textOf(one)
+        if known ~= nil then tl.weaponNames[i] = known end
+        return known
+    end
     tl.weaponNow = function()
         local t = os.clock()
         if t - cacheAt < 0.5 then return cache end
@@ -2298,36 +2315,21 @@ do
         local bp = backpack()
         if bp then
             pcall(function()
-                local names, n = {}, 0
                 local list = bp.MainWeapons
-                if list ~= nil then
-                    local okn, len = pcall(function() return #list end)
-                    len = okn and tonumber(len) or nil
-                    if len and len > 0 then
-                        n = len
-                        for i = 1, n do
-                            local one = list[i]
-                            if one == nil then -- TArray also answers Get(index)
-                                local okg, g = pcall(function() return list:Get(i) end)
-                                one = okg and g or nil
-                            end
-                            names[i] = textOf(one)
-                        end
-                    else
-                        pcall(function() list:ForEach(function(_, v) names[#names + 1] = textOf(v) end) end)
-                        n = #names
-                    end
-                end
+                local n = 0
+                local okn, len = pcall(function() return #list end)
+                len = okn and tonumber(len) or nil
+                if len and len > 0 then n = len end
                 local idx = tonumber(bp.CurrentWeaponIndex)
-                -- the ID is the authoritative answer; the array is asked with both
-                -- index conventions because CurrentWeaponIndex was 1 with two weapons
-                local cur = textOf(bp.CurrentMainWeaponID)
+                -- both index conventions are asked because CurrentWeaponIndex was 1
+                -- with two weapons; the array answers with the display name the
+                -- module matches, so the ID is only the fallback
+                local cur = tl.weaponNameAt(list, idx and (idx + 1))
+                if not cur then cur = tl.weaponNameAt(list, idx) end
                 local nxt = nil
-                if idx then
-                    cur = cur or names[idx + 1] or names[idx]
-                    if n > 1 then nxt = names[(idx + 1) % n + 1] end
-                end
-                out = { current = hookName(cur), next = hookName(nxt), names = names, id = textOf(bp.CurrentMainWeaponID) }
+                if idx and n > 1 then nxt = tl.weaponNameAt(list, (idx + 1) % n + 1) end
+                if not cur then cur = textOf(bp.CurrentMainWeaponID) end
+                out = { current = hookName(cur), next = hookName(nxt) }
             end)
         end
         cache = out
